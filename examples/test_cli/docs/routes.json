@@ -1,0 +1,163 @@
+[
+    {
+        "method": "GET",
+        "path": "/users",
+        "description": "",
+        "handler_name": "main.parseRouterFromFile.func1",
+        "parameters": null,
+        "query_parameters": null,
+        "headers": null,
+        "request_body": {
+            "type": "",
+            "schema": null
+        },
+        "responses": null,
+        "tags": null,
+        "authentication": {
+            "type": "",
+            "required": false
+        },
+        "estimated_time_ms": 0,
+        "permissions": null,
+        "api_version": "v1.0",
+        "deprecated": false,
+        "rate_limit": {
+            "requests_per_minute": 100,
+            "time_window_seconds": 60
+        },
+        "notes": ""
+    },
+    {
+        "method": "GET",
+        "path": "/users/{id}",
+        "description": "",
+        "handler_name": "main.parseRouterFromFile.func2",
+        "parameters": [
+            {
+                "name": "id",
+                "type": "string",
+                "required": true,
+                "description": ""
+            }
+        ],
+        "query_parameters": null,
+        "headers": null,
+        "request_body": {
+            "type": "",
+            "schema": null
+        },
+        "responses": null,
+        "tags": null,
+        "authentication": {
+            "type": "",
+            "required": false
+        },
+        "estimated_time_ms": 0,
+        "permissions": null,
+        "api_version": "v1.0",
+        "deprecated": false,
+        "rate_limit": {
+            "requests_per_minute": 100,
+            "time_window_seconds": 60
+        },
+        "notes": ""
+    },
+    {
+        "method": "POST",
+        "path": "/users",
+        "description": "",
+        "handler_name": "main.parseRouterFromFile.func3",
+        "parameters": null,
+        "query_parameters": null,
+        "headers": null,
+        "request_body": {
+            "type": "",
+            "schema": null
+        },
+        "responses": null,
+        "tags": null,
+        "authentication": {
+            "type": "",
+            "required": false
+        },
+        "estimated_time_ms": 0,
+        "permissions": null,
+        "api_version": "v1.0",
+        "deprecated": false,
+        "rate_limit": {
+            "requests_per_minute": 100,
+            "time_window_seconds": 60
+        },
+        "notes": ""
+    },
+    {
+        "method": "PUT",
+        "path": "/users/{id}",
+        "description": "",
+        "handler_name": "main.parseRouterFromFile.func4",
+        "parameters": [
+            {
+                "name": "id",
+                "type": "string",
+                "required": true,
+                "description": ""
+            }
+        ],
+        "query_parameters": null,
+        "headers": null,
+        "request_body": {
+            "type": "",
+            "schema": null
+        },
+        "responses": null,
+        "tags": null,
+        "authentication": {
+            "type": "",
+            "required": false
+        },
+        "estimated_time_ms": 0,
+        "permissions": null,
+        "api_version": "v1.0",
+        "deprecated": false,
+        "rate_limit": {
+            "requests_per_minute": 100,
+            "time_window_seconds": 60
+        },
+        "notes": ""
+    },
+    {
+        "method": "DELETE",
+        "path": "/users/{id}",
+        "description": "",
+        "handler_name": "main.parseRouterFromFile.func5",
+        "parameters": [
+            {
+                "name": "id",
+                "type": "string",
+                "required": true,
+                "description": ""
+            }
+        ],
+        "query_parameters": null,
+        "headers": null,
+        "request_body": {
+            "type": "",
+            "schema": null
+        },
+        "responses": null,
+        "tags": null,
+        "authentication": {
+            "type": "",
+            "required": false
+        },
+        "estimated_time_ms": 0,
+        "permissions": null,
+        "api_version": "v1.0",
+        "deprecated": false,
+        "rate_limit": {
+            "requests_per_minute": 100,
+            "time_window_seconds": 60
+        },
+        "notes": ""
+    }
+]
