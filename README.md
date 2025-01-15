@@ -204,7 +204,7 @@ O projeto utiliza GitHub Actions para:
 Para suporte:
 - Abra uma issue no GitHub
 - Entre em contato via [LinkedIn](https://www.linkedin.com/in/jefferson-martins-dev/)
-- Email: jefferson.martins.dev@gmail.com
+- Email: jefferson.developers@gmail.com
 
 ## 📄 Licença
 
