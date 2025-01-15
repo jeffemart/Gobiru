@@ -15,7 +15,7 @@ func TestGinAnalyzer(t *testing.T) {
 	router.GET("/users/:id", func(c *gin.Context) {})
 	router.POST("/users", func(c *gin.Context) {})
 
-	analyzer := NewGinAnalyzer()
+	analyzer := NewAnalyzer()
 	err := analyzer.AnalyzeRoutes(router)
 	if err != nil {
 		t.Fatalf("Failed to analyze routes: %v", err)

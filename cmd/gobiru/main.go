@@ -1,17 +1,18 @@
 package main
 
 import (
+	"encoding/json"
 	"flag"
 	"fmt"
 	"log"
 	"os"
 	"path/filepath"
 
+	"github.com/jeffemart/Gobiru/app"
+	"github.com/jeffemart/Gobiru/app/gin"
 	"github.com/jeffemart/Gobiru/app/models"
-	"github.com/jeffemart/gobiru/internal/analyzer/gin"
-	"github.com/jeffemart/gobiru/internal/analyzer/mux"
-	"github.com/jeffemart/gobiru/internal/server"
-	"github.com/jeffemart/gobiru/pkg/openapi"
+	"github.com/jeffemart/Gobiru/app/openapi"
+	"github.com/jeffemart/Gobiru/app/server"
 )
 
 const version = "1.0.0"
@@ -130,7 +131,7 @@ func analyzeRoutes(framework, sourceFile string) ([]models.RouteInfo, error) {
 		analyzer := gin.NewAnalyzer()
 		return analyzer.AnalyzeFile(sourceFile)
 	case "mux":
-		analyzer := mux.NewAnalyzer()
+		analyzer := app.NewRouteAnalyzer()
 		return analyzer.AnalyzeFile(sourceFile)
 	default:
 		return nil, fmt.Errorf("unsupported framework: %s", framework)
@@ -153,6 +154,20 @@ func exportDocs(routes []models.RouteInfo, jsonFile, openAPIFile string, info op
 		if err := openapi.ExportOpenAPI(spec, openAPIFile); err != nil {
 			return fmt.Errorf("failed to export OpenAPI spec: %v", err)
 		}
+	}
+
+	return nil
+}
+
+func exportJSON(routes []models.RouteInfo, filepath string) error {
+	data, err := json.MarshalIndent(routes, "", "    ")
+	if err != nil {
+		return fmt.Errorf("failed to marshal routes: %v", err)
+	}
+
+	err = os.WriteFile(filepath, data, 0644)
+	if err != nil {
+		return fmt.Errorf("failed to write file: %v", err)
 	}
 
 	return nil

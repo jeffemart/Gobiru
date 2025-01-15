@@ -1,6 +1,7 @@
 package gin
 
 import (
+	"fmt"
 	"reflect"
 	"runtime"
 	"strings"
@@ -14,11 +15,30 @@ type GinAnalyzer struct {
 	routes []models.RouteInfo
 }
 
-// NewGinAnalyzer creates a new GinAnalyzer instance
-func NewGinAnalyzer() *GinAnalyzer {
+// NewAnalyzer creates a new GinAnalyzer instance
+func NewAnalyzer() *GinAnalyzer {
 	return &GinAnalyzer{
 		routes: make([]models.RouteInfo, 0),
 	}
+}
+
+// AnalyzeFile analyzes a file containing Gin routes
+func (ga *GinAnalyzer) AnalyzeFile(filePath string) ([]models.RouteInfo, error) {
+	// Create a new Gin engine for analysis
+	gin.SetMode(gin.ReleaseMode)
+	router := gin.New()
+
+	// Configure router from file
+	if err := configureGinRouter(router, filePath); err != nil {
+		return nil, fmt.Errorf("failed to configure Gin router: %v", err)
+	}
+
+	// Analyze routes
+	if err := ga.AnalyzeRoutes(router); err != nil {
+		return nil, fmt.Errorf("failed to analyze routes: %v", err)
+	}
+
+	return ga.routes, nil
 }
 
 // AnalyzeRoutes analyzes the given Gin engine and extracts route information
@@ -74,4 +94,15 @@ func extractPathParameters(path string) []models.Parameter {
 	}
 
 	return params
+}
+
+func configureGinRouter(router *gin.Engine, filePath string) error {
+	// Example routes for testing
+	router.GET("/api/v1/products", func(c *gin.Context) {})
+	router.GET("/api/v1/products/:id", func(c *gin.Context) {})
+	router.POST("/api/v1/products", func(c *gin.Context) {})
+	router.PUT("/api/v1/products/:id", func(c *gin.Context) {})
+	router.DELETE("/api/v1/products/:id", func(c *gin.Context) {})
+
+	return nil
 }

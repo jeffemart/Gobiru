@@ -34,4 +34,4 @@ require (
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
 
-// ... outras dependências serão adicionadas automaticamente pelo go mod tidy
+// As outras dependências serão adicionadas automaticamente pelo go mod tidy

@@ -5,7 +5,7 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
-	"github.com/jeffemart/Gobiru/app/gin"
+	gobiru "github.com/jeffemart/Gobiru/app/gin"
 	"github.com/jeffemart/Gobiru/app/openapi"
 )
 
@@ -26,7 +26,7 @@ func main() {
 	router.DELETE("/users/:id", deleteUser)
 
 	// Create Gin analyzer
-	analyzer := gin.NewGinAnalyzer()
+	analyzer := gobiru.NewAnalyzer()
 
 	// Analyze routes
 	err := analyzer.AnalyzeRoutes(router)
