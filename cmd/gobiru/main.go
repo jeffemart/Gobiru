@@ -4,87 +4,156 @@ import (
 	"flag"
 	"fmt"
 	"log"
-	"net/http"
 	"os"
 	"path/filepath"
 
-	"github.com/gorilla/mux"
-	gobiru "github.com/jeffemart/Gobiru/app"
-	"github.com/jeffemart/Gobiru/app/openapi"
+	"github.com/jeffemart/Gobiru/app/models"
+	"github.com/jeffemart/gobiru/internal/analyzer/gin"
+	"github.com/jeffemart/gobiru/internal/analyzer/mux"
+	"github.com/jeffemart/gobiru/internal/server"
+	"github.com/jeffemart/gobiru/pkg/openapi"
 )
 
+const version = "1.0.0"
+
 func main() {
-	outputFile := flag.String("output", "routes.json", "Output file path for the route documentation")
-	openAPIFile := flag.String("openapi", "", "Output file path for OpenAPI specification")
-	apiTitle := flag.String("title", "API Documentation", "API title for OpenAPI spec")
-	apiDesc := flag.String("description", "", "API description for OpenAPI spec")
-	apiVersion := flag.String("version", "1.0.0", "API version for OpenAPI spec")
+	// Command flags
+	var (
+		outputFile  = flag.String("output", "docs/routes.json", "Output file path for route documentation")
+		openAPIFile = flag.String("openapi", "docs/openapi.json", "Output file path for OpenAPI specification")
+		apiTitle    = flag.String("title", "API Documentation", "API title for OpenAPI spec")
+		apiDesc     = flag.String("description", "", "API description for OpenAPI spec")
+		apiVersion  = flag.String("version", "1.0.0", "API version for OpenAPI spec")
+		framework   = flag.String("framework", "", "Framework to analyze (mux or gin)")
+		serve       = flag.Bool("serve", false, "Start documentation server after generation")
+		port        = flag.Int("port", 8081, "Port for documentation server")
+		help        = flag.Bool("help", false, "Show help message")
+		showVersion = flag.Bool("version", false, "Show version")
+	)
+
 	flag.Parse()
 
+	if *help {
+		showHelp()
+		return
+	}
+
+	if *showVersion {
+		fmt.Printf("Gobiru version %s\n", version)
+		return
+	}
+
+	if *framework == "" {
+		log.Fatal("Framework is required. Use -framework flag with 'mux' or 'gin'")
+	}
+
 	if flag.NArg() < 1 {
-		fmt.Println("Usage: gobiru [options] <path-to-routes-file>")
-		flag.PrintDefaults()
-		os.Exit(1)
+		log.Fatal("Source file is required. Usage: gobiru [options] <source-file>")
 	}
 
-	routesFile := flag.Arg(0)
-	router, err := parseRouterFromFile(routesFile)
-	if err != nil {
-		log.Fatalf("Failed to parse router from file: %v", err)
+	sourceFile := flag.Arg(0)
+
+	// Create output directories
+	ensureDir(*outputFile)
+	if *openAPIFile != "" {
+		ensureDir(*openAPIFile)
 	}
 
-	analyzer := gobiru.NewRouteAnalyzer()
-	err = analyzer.AnalyzeRoutes(router)
+	// Generate documentation
+	routes, err := analyzeRoutes(*framework, sourceFile)
 	if err != nil {
 		log.Fatalf("Failed to analyze routes: %v", err)
 	}
 
-	// Create output directory if it doesn't exist
-	if dir := filepath.Dir(*outputFile); dir != "" {
-		if err := os.MkdirAll(dir, 0755); err != nil {
-			log.Fatalf("Failed to create output directory: %v", err)
-		}
+	// Export documentation
+	if err := exportDocs(routes, *outputFile, *openAPIFile, openapi.Info{
+		Title:       *apiTitle,
+		Description: *apiDesc,
+		Version:     *apiVersion,
+	}); err != nil {
+		log.Fatalf("Failed to export documentation: %v", err)
 	}
 
-	// Export route information as JSON
-	err = analyzer.ExportJSON(*outputFile)
-	if err != nil {
-		log.Fatalf("Failed to export routes: %v", err)
-	}
-
-	fmt.Printf("Route documentation generated successfully at: %s\n", *outputFile)
-
-	// Export OpenAPI specification if requested
+	fmt.Printf("Documentation generated successfully!\n")
+	fmt.Printf("Routes JSON: %s\n", *outputFile)
 	if *openAPIFile != "" {
-		if dir := filepath.Dir(*openAPIFile); dir != "" {
-			if err := os.MkdirAll(dir, 0755); err != nil {
-				log.Fatalf("Failed to create OpenAPI output directory: %v", err)
-			}
-		}
+		fmt.Printf("OpenAPI spec: %s\n", *openAPIFile)
+	}
 
-		info := openapi.Info{
-			Title:       *apiTitle,
-			Description: *apiDesc,
-			Version:     *apiVersion,
-		}
-
-		err = analyzer.ExportOpenAPI(*openAPIFile, info)
-		if err != nil {
-			log.Fatalf("Failed to export OpenAPI specification: %v", err)
-		}
-		fmt.Printf("OpenAPI specification generated successfully at: %s\n", *openAPIFile)
+	// Start documentation server if requested
+	if *serve {
+		fmt.Printf("\nStarting documentation server...\n")
+		server.Serve(*port, filepath.Dir(*outputFile))
 	}
 }
 
-func parseRouterFromFile(filePath string) (*mux.Router, error) {
-	router := mux.NewRouter()
+func showHelp() {
+	fmt.Println(`Gobiru - API Documentation Generator
 
-	// Rotas de exemplo para teste
-	router.HandleFunc("/users", func(w http.ResponseWriter, r *http.Request) {}).Methods("GET")
-	router.HandleFunc("/users/{id}", func(w http.ResponseWriter, r *http.Request) {}).Methods("GET")
-	router.HandleFunc("/users", func(w http.ResponseWriter, r *http.Request) {}).Methods("POST")
-	router.HandleFunc("/users/{id}", func(w http.ResponseWriter, r *http.Request) {}).Methods("PUT")
-	router.HandleFunc("/users/{id}", func(w http.ResponseWriter, r *http.Request) {}).Methods("DELETE")
+Usage:
+  gobiru [options] <source-file>
 
-	return router, nil
+Options:`)
+	flag.PrintDefaults()
+	fmt.Println(`
+Examples:
+  # Generate docs for a Gin application
+  gobiru -framework gin -output docs/routes.json main.go
+
+  # Generate docs and start server
+  gobiru -framework mux -serve main.go
+
+  # Full example with all options
+  gobiru -framework gin \
+         -output docs/routes.json \
+         -openapi docs/openapi.json \
+         -title "My API" \
+         -description "My API description" \
+         -version "1.0.0" \
+         -serve \
+         -port 8081 \
+         main.go`)
+}
+
+func ensureDir(filePath string) {
+	dir := filepath.Dir(filePath)
+	if dir != "" {
+		if err := os.MkdirAll(dir, 0755); err != nil {
+			log.Fatalf("Failed to create directory: %v", err)
+		}
+	}
+}
+
+func analyzeRoutes(framework, sourceFile string) ([]models.RouteInfo, error) {
+	switch framework {
+	case "gin":
+		analyzer := gin.NewAnalyzer()
+		return analyzer.AnalyzeFile(sourceFile)
+	case "mux":
+		analyzer := mux.NewAnalyzer()
+		return analyzer.AnalyzeFile(sourceFile)
+	default:
+		return nil, fmt.Errorf("unsupported framework: %s", framework)
+	}
+}
+
+func exportDocs(routes []models.RouteInfo, jsonFile, openAPIFile string, info openapi.Info) error {
+	// Export routes JSON
+	if err := exportJSON(routes, jsonFile); err != nil {
+		return fmt.Errorf("failed to export routes JSON: %v", err)
+	}
+
+	// Export OpenAPI spec if requested
+	if openAPIFile != "" {
+		spec, err := openapi.ConvertToOpenAPI(routes, info)
+		if err != nil {
+			return fmt.Errorf("failed to convert to OpenAPI: %v", err)
+		}
+
+		if err := openapi.ExportOpenAPI(spec, openAPIFile); err != nil {
+			return fmt.Errorf("failed to export OpenAPI spec: %v", err)
+		}
+	}
+
+	return nil
 }

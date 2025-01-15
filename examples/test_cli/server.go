@@ -13,12 +13,13 @@ func main() {
 	flag.Parse()
 
 	// Verificar se o diretório docs existe
-	if _, err := os.Stat("docs"); os.IsNotExist(err) {
+	docsDir := "docs"
+	if _, err := os.Stat(docsDir); os.IsNotExist(err) {
 		log.Fatal("Diretório 'docs' não encontrado. Execute primeiro o comando para gerar a documentação.")
 	}
 
 	// Servir arquivos estáticos do diretório docs
-	fs := http.FileServer(http.Dir("docs"))
+	fs := http.FileServer(http.Dir(docsDir))
 	http.Handle("/docs/", http.StripPrefix("/docs/", fs))
 
 	addr := fmt.Sprintf(":%d", *port)

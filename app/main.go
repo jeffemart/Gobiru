@@ -71,6 +71,11 @@ func (ra *RouteAnalyzer) AnalyzeRoutes(router *mux.Router) error {
 	})
 }
 
+// GetRoutes returns the analyzed routes
+func (ra *RouteAnalyzer) GetRoutes() []models.RouteInfo {
+	return ra.routes
+}
+
 // extractPathParameters extracts path parameters from the route template
 func extractPathParameters(pathTemplate string) []string {
 	var params []string

@@ -1,0 +1,12 @@
+# Definir o comportamento padrão para normalização automática de line endings
+* text=auto
+
+# Forçar line endings específicos para certos tipos de arquivo
+*.go text eol=lf
+*.mod text eol=lf
+*.sum text eol=lf
+*.md text eol=lf
+*.json text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+*.sh text eol=lf 
