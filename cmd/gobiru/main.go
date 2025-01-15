@@ -24,7 +24,7 @@ func main() {
 		openAPIFile = flag.String("openapi", "docs/openapi.json", "Output file path for OpenAPI specification")
 		apiTitle    = flag.String("title", "API Documentation", "API title for OpenAPI spec")
 		apiDesc     = flag.String("description", "", "API description for OpenAPI spec")
-		apiVersion  = flag.String("version", "1.0.0", "API version for OpenAPI spec")
+		apiVersion  = flag.String("api-version", "1.0.0", "API version for OpenAPI spec")
 		framework   = flag.String("framework", "", "Framework to analyze (mux or gin)")
 		serve       = flag.Bool("serve", false, "Start documentation server after generation")
 		port        = flag.Int("port", 8081, "Port for documentation server")
