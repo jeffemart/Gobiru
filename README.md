@@ -1,6 +1,8 @@
-# Gobiru
+# Gobiru 
 
-Gobiru é uma ferramenta de linha de comando para gerar documentação de APIs Go automaticamente a partir do seu código. Ele analisa suas rotas do Gorilla Mux e gera documentação no formato OpenAPI (Swagger).
+<div align="left">
+       <img src="https://res.cloudinary.com/dx70wyorg/image/upload/v1736953035/photo_2025-01-15_11-40-32_esheqe.jpg" width="200" alt="Gobiru Mascot">
+</div>
 
 ## 🚀 Funcionalidades
 
