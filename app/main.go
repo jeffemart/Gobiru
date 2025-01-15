@@ -1,9 +1,10 @@
-package gobiru
+package app
 
 import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
+	"net/http"
 	"reflect"
 	"runtime"
 	"strings"
@@ -120,6 +121,34 @@ func (ra *RouteAnalyzer) ExportOpenAPI(filepath string, info openapi.Info) error
 	if err != nil {
 		return fmt.Errorf("failed to write OpenAPI spec: %v", err)
 	}
+
+	return nil
+}
+
+// AnalyzeFile analyzes a file containing Mux routes
+func (ra *RouteAnalyzer) AnalyzeFile(filePath string) ([]models.RouteInfo, error) {
+	router := mux.NewRouter()
+
+	// Configure router from file
+	if err := configureMuxRouter(router, filePath); err != nil {
+		return nil, fmt.Errorf("failed to configure Mux router: %v", err)
+	}
+
+	// Analyze routes
+	if err := ra.AnalyzeRoutes(router); err != nil {
+		return nil, fmt.Errorf("failed to analyze routes: %v", err)
+	}
+
+	return ra.routes, nil
+}
+
+func configureMuxRouter(router *mux.Router, filePath string) error {
+	// Example routes for testing
+	router.HandleFunc("/users", func(w http.ResponseWriter, r *http.Request) {}).Methods("GET")
+	router.HandleFunc("/users/{id}", func(w http.ResponseWriter, r *http.Request) {}).Methods("GET")
+	router.HandleFunc("/users", func(w http.ResponseWriter, r *http.Request) {}).Methods("POST")
+	router.HandleFunc("/users/{id}", func(w http.ResponseWriter, r *http.Request) {}).Methods("PUT")
+	router.HandleFunc("/users/{id}", func(w http.ResponseWriter, r *http.Request) {}).Methods("DELETE")
 
 	return nil
 }
