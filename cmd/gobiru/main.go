@@ -4,8 +4,11 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"net/http"
 	"os"
+	"path/filepath"
 
+	"github.com/gorilla/mux"
 	gobiru "github.com/jeffemart/Gobiru/app"
 	"github.com/jeffemart/Gobiru/app/openapi"
 )
@@ -24,13 +27,27 @@ func main() {
 		os.Exit(1)
 	}
 
-	analyzer := gobiru.NewRouteAnalyzer()
+	routesFile := flag.Arg(0)
+	router, err := parseRouterFromFile(routesFile)
+	if err != nil {
+		log.Fatalf("Failed to parse router from file: %v", err)
+	}
 
-	// TODO: Implement logic to load and parse the routes file
-	// This will require reading the user's routes.go file and getting the router instance
+	analyzer := gobiru.NewRouteAnalyzer()
+	err = analyzer.AnalyzeRoutes(router)
+	if err != nil {
+		log.Fatalf("Failed to analyze routes: %v", err)
+	}
+
+	// Create output directory if it doesn't exist
+	if dir := filepath.Dir(*outputFile); dir != "" {
+		if err := os.MkdirAll(dir, 0755); err != nil {
+			log.Fatalf("Failed to create output directory: %v", err)
+		}
+	}
 
 	// Export route information as JSON
-	err := analyzer.ExportJSON(*outputFile)
+	err = analyzer.ExportJSON(*outputFile)
 	if err != nil {
 		log.Fatalf("Failed to export routes: %v", err)
 	}
@@ -39,6 +56,12 @@ func main() {
 
 	// Export OpenAPI specification if requested
 	if *openAPIFile != "" {
+		if dir := filepath.Dir(*openAPIFile); dir != "" {
+			if err := os.MkdirAll(dir, 0755); err != nil {
+				log.Fatalf("Failed to create OpenAPI output directory: %v", err)
+			}
+		}
+
 		info := openapi.Info{
 			Title:       *apiTitle,
 			Description: *apiDesc,
@@ -51,4 +74,17 @@ func main() {
 		}
 		fmt.Printf("OpenAPI specification generated successfully at: %s\n", *openAPIFile)
 	}
+}
+
+func parseRouterFromFile(filePath string) (*mux.Router, error) {
+	router := mux.NewRouter()
+
+	// Rotas de exemplo para teste
+	router.HandleFunc("/users", func(w http.ResponseWriter, r *http.Request) {}).Methods("GET")
+	router.HandleFunc("/users/{id}", func(w http.ResponseWriter, r *http.Request) {}).Methods("GET")
+	router.HandleFunc("/users", func(w http.ResponseWriter, r *http.Request) {}).Methods("POST")
+	router.HandleFunc("/users/{id}", func(w http.ResponseWriter, r *http.Request) {}).Methods("PUT")
+	router.HandleFunc("/users/{id}", func(w http.ResponseWriter, r *http.Request) {}).Methods("DELETE")
+
+	return router, nil
 }
