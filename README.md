@@ -16,35 +16,65 @@ go install github.com/jeffemart/Gobiru/cmd/gobiru@latest
 go get github.com/jeffemart/Gobiru
 ```
 
+## 🚀 Recursos
+
+- Suporte para Gin e Gorilla Mux
+- Geração automática de documentação OpenAPI/Swagger
+- Interface Swagger UI embutida
+- Detecção automática de rotas e parâmetros
+- Servidor de documentação integrado
+- Personalização via flags de comando
+
+## 📝 Exemplos de Uso
+
+### Gorilla Mux
+```bash
+# Gerar documentação para API Mux
+gobiru -framework mux -router routes.go -output docs/routes.json -openapi docs/openapi.json -serve
+
+# Executar a API
+go run main.go routes.go
+```
+
+### Gin
+```bash
+# Gerar documentação para API Gin
+gobiru -framework gin -router routes.go -output docs/routes.json -openapi docs/openapi.json -serve
+
+# Executar a API
+go run main.go routes.go
+```
+
 ## 📖 Uso do CLI
 
 ### Comandos Básicos
 
 ```bash
-# Gerar documentação para API Gin
-gobiru -framework gin -output docs/routes.json main.go
+# Gerar documentação usando arquivo routes.go padrão
+gobiru -framework gin -output docs/routes.json
 
-# Gerar documentação para API Mux
-gobiru -framework mux -output docs/routes.json main.go
+# Especificar arquivo de rotas personalizado
+gobiru -framework gin -router internal/routes/router.go -output docs/routes.json
 
 # Gerar documentação e iniciar servidor Swagger UI
-gobiru -framework gin -output docs/routes.json -openapi docs/openapi.json -serve main.go
+gobiru -framework mux -router api/routes.go -output docs/routes.json -openapi docs/openapi.json -serve
 ```
 
 ### Opções Disponíveis
 
 ```bash
 Opções:
-  -framework string     Framework a ser analisado (gin ou mux)
-  -output string       Caminho do arquivo JSON de rotas (default "docs/routes.json")
-  -openapi string      Caminho do arquivo OpenAPI/Swagger (default "docs/openapi.json")
-  -title string        Título da API para spec OpenAPI (default "API Documentation")
-  -description string  Descrição da API para spec OpenAPI
-  -api-version string  Versão da API para spec OpenAPI (default "1.0.0")
-  -serve              Iniciar servidor de documentação após geração
-  -port int           Porta do servidor de documentação (default 8081)
-  -help              Mostrar mensagem de ajuda
-  -version           Mostrar versão do Gobiru
+  -framework string    Framework a ser analisado (gin ou mux)
+  -router string      Caminho do arquivo com definição do router (padrão: routes.go)
+  -output string      Caminho do arquivo JSON de rotas (default "docs/routes.json")
+  -openapi string     Caminho do arquivo OpenAPI/Swagger (default "docs/openapi.json")
+  -title string       Título da API para spec OpenAPI (default "API Documentation")
+  -description string Descrição da API para spec OpenAPI
+  -api-version string Versão da API para spec OpenAPI (default "1.0.0")
+  -serve             Iniciar servidor de documentação após geração
+  -port int          Porta do servidor de documentação (default 8081)
+  -help             Mostrar mensagem de ajuda
+  -version          Mostrar versão do Gobiru
 ```
 
 ### Exemplos Completos

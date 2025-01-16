@@ -49,7 +49,7 @@ func (ga *GinAnalyzer) AnalyzeRoutes(engine *gin.Engine) error {
 		routeInfo := models.RouteInfo{
 			Method:      route.Method,
 			Path:        route.Path,
-			HandlerName: getHandlerName(route.Handler),
+			HandlerName: runtime.FuncForPC(reflect.ValueOf(route.Handler).Pointer()).Name(),
 			APIVersion:  "v1.0",
 			RateLimit: models.RateLimit{
 				RequestsPerMinute: 100,

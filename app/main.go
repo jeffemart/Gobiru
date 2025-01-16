@@ -4,7 +4,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
-	"net/http"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"reflect"
 	"runtime"
 	"strings"
@@ -127,28 +129,146 @@ func (ra *RouteAnalyzer) ExportOpenAPI(filepath string, info openapi.Info) error
 
 // AnalyzeFile analyzes a file containing Mux routes
 func (ra *RouteAnalyzer) AnalyzeFile(filePath string) ([]models.RouteInfo, error) {
-	router := mux.NewRouter()
-
-	// Configure router from file
-	if err := configureMuxRouter(router, filePath); err != nil {
-		return nil, fmt.Errorf("failed to configure Mux router: %v", err)
+	// Copiar o arquivo de rotas para o diretório temporário
+	routesContent, err := ioutil.ReadFile(filePath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read routes file: %v", err)
 	}
 
-	// Analyze routes
-	if err := ra.AnalyzeRoutes(router); err != nil {
-		return nil, fmt.Errorf("failed to analyze routes: %v", err)
+	// Criar um diretório temporário para compilar
+	tmpDir, err := ioutil.TempDir("", "gobiru")
+	if err != nil {
+		return nil, fmt.Errorf("failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	// Criar arquivo temporário main
+	tmpMain := filepath.Join(tmpDir, "main.go")
+	mainContent := fmt.Sprintf(`
+package main
+
+import (
+	"encoding/json"
+	"fmt"
+	"os"
+	"strings"
+	"github.com/gorilla/mux"
+	"runtime"
+	"reflect"
+)
+
+type RouteInfo struct {
+	Method      string   %[1]sjson:"method"%[1]s
+	Path        string   %[1]sjson:"path"%[1]s
+	HandlerName string   %[1]sjson:"handler_name"%[1]s
+	Parameters  []Parameter %[1]sjson:"parameters"%[1]s
+}
+
+type Parameter struct {
+	Name     string %[1]sjson:"name"%[1]s
+	Type     string %[1]sjson:"type"%[1]s
+	Required bool   %[1]sjson:"required"%[1]s
+}
+
+func main() {
+	router := SetupRouter()
+	var routes []RouteInfo
+
+	router.Walk(func(route *mux.Route, router *mux.Router, ancestors []*mux.Route) error {
+		info := RouteInfo{}
+		
+		if path, err := route.GetPathTemplate(); err == nil {
+			info.Path = path
+			
+			// Extract path parameters
+			for _, part := range splitPath(path) {
+				if isParameter(part) {
+					info.Parameters = append(info.Parameters, Parameter{
+						Name:     trimParameter(part),
+						Type:     "string",
+						Required: true,
+					})
+				}
+			}
+		}
+		
+		if methods, err := route.GetMethods(); err == nil && len(methods) > 0 {
+			info.Method = methods[0]
+		}
+
+		if handler := route.GetHandler(); handler != nil {
+			info.HandlerName = runtime.FuncForPC(reflect.ValueOf(handler).Pointer()).Name()
+		}
+
+		routes = append(routes, info)
+		return nil
+	})
+	
+	data, err := json.Marshal(routes)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %%v\n", err)
+		os.Exit(1)
+	}
+	fmt.Println(string(data))
+}
+
+func splitPath(path string) []string {
+	return strings.Split(path, "/")
+}
+
+func isParameter(part string) bool {
+	return strings.HasPrefix(part, "{") && strings.HasSuffix(part, "}")
+}
+
+func trimParameter(part string) string {
+	return strings.TrimSuffix(strings.TrimPrefix(part, "{"), "}")
+}
+`, "`")
+
+	if err := ioutil.WriteFile(tmpMain, []byte(mainContent), 0644); err != nil {
+		return nil, fmt.Errorf("failed to write temp main: %v", err)
+	}
+
+	tmpRoutes := filepath.Join(tmpDir, "routes.go")
+	if err := ioutil.WriteFile(tmpRoutes, routesContent, 0644); err != nil {
+		return nil, fmt.Errorf("failed to write temp routes: %v", err)
+	}
+
+	// Criar go.mod
+	modContent := `module temp
+
+go 1.21
+
+require (
+	github.com/gorilla/mux v1.8.1
+)
+`
+	if err := ioutil.WriteFile(filepath.Join(tmpDir, "go.mod"), []byte(modContent), 0644); err != nil {
+		return nil, fmt.Errorf("failed to write go.mod: %v", err)
+	}
+
+	// Executar go mod tidy
+	cmd := exec.Command("go", "mod", "tidy")
+	cmd.Dir = tmpDir
+	if err := cmd.Run(); err != nil {
+		return nil, fmt.Errorf("failed to tidy go module: %v", err)
+	}
+
+	// Executar o programa temporário
+	cmd = exec.Command("go", "run", ".")
+	cmd.Dir = tmpDir
+	output, err := cmd.Output()
+	if err != nil {
+		if exitErr, ok := err.(*exec.ExitError); ok {
+			return nil, fmt.Errorf("failed to run temporary program: %v\nStderr: %s", err, string(exitErr.Stderr))
+		}
+		return nil, fmt.Errorf("failed to run temporary program: %v", err)
+	}
+
+	// Analisar a saída
+	if err := json.Unmarshal(output, &ra.routes); err != nil {
+		return nil, fmt.Errorf("failed to parse routes output: %v", err)
 	}
 
 	return ra.routes, nil
-}
-
-func configureMuxRouter(router *mux.Router, filePath string) error {
-	// Example routes for testing
-	router.HandleFunc("/users", func(w http.ResponseWriter, r *http.Request) {}).Methods("GET")
-	router.HandleFunc("/users/{id}", func(w http.ResponseWriter, r *http.Request) {}).Methods("GET")
-	router.HandleFunc("/users", func(w http.ResponseWriter, r *http.Request) {}).Methods("POST")
-	router.HandleFunc("/users/{id}", func(w http.ResponseWriter, r *http.Request) {}).Methods("PUT")
-	router.HandleFunc("/users/{id}", func(w http.ResponseWriter, r *http.Request) {}).Methods("DELETE")
-
-	return nil
 }
