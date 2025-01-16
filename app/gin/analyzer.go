@@ -81,10 +81,23 @@ func main() {
 }`
 }
 
-// Adicionando o método GetDependencies
 func (ga *GinAnalyzer) GetDependencies() []string {
 	return []string{
 		"github.com/gin-gonic/gin v1.9.1",
+		"github.com/bytedance/sonic v1.9.1",
+		"github.com/go-playground/validator/v10 v10.14.0",
+		"github.com/goccy/go-json v0.10.2",
+		"github.com/json-iterator/go v1.1.12",
+		"github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd",
+		"github.com/modern-go/reflect2 v1.0.2",
+		"github.com/pelletier/go-toml/v2 v2.0.8",
+		"github.com/ugorji/go/codec v1.2.11",
+		"golang.org/x/crypto v0.14.0",
+		"golang.org/x/net v0.17.0",
+		"golang.org/x/sys v0.15.0",
+		"golang.org/x/text v0.13.0",
+		"google.golang.org/protobuf v1.30.0",
+		"gopkg.in/yaml.v3 v3.0.1",
 	}
 }
 

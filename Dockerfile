@@ -23,6 +23,9 @@ WORKDIR /app
 # Copiar o binário do estágio de build
 COPY --from=builder /gobiru /usr/local/bin/gobiru
 
+# Criar diretório docs
+RUN mkdir -p /app/docs
+
 # Copiar arquivos estáticos
 COPY static/docs/index.html /app/docs/index.html
 

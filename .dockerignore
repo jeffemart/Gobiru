@@ -3,4 +3,5 @@
 .github
 docs
 *.md
-LICENSE 
+LICENSE
+!static/docs/index.html 
