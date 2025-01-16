@@ -2,29 +2,21 @@
 # https://github.com/github/gitignore/blob/main/community/Golang/Go.AllowList.gitignore
 #
 # Binaries
-/gobiru
-*.exe
-*.exe~
-*.dll
-*.so
-*.dylib
+bin/
+gobiru
 
-# Test binary, built with `go test -c`
-*.test
-
-# Output of the go coverage tool, specifically when used with LiteIDE
-*.out
-
-# Dependency directories (remove the comment below to include it)
-vendor/
-
-# IDE directories
+# IDE
 .idea/
 .vscode/
 
-# Generated documentation
+# Docs output
 docs/
-!examples/test_cli/docs/index.html
 
-# Environment variables
-.env
+# Dependencies
+vendor/
+
+# Logs
+*.log
+
+# OS
+.DS_Store

@@ -1,263 +1,70 @@
 package main
 
 import (
-	"encoding/json"
 	"flag"
 	"fmt"
-	"io/ioutil"
 	"log"
-	"os"
-	"path/filepath"
 
-	"github.com/jeffemart/Gobiru/app/analyzer"
-	"github.com/jeffemart/Gobiru/app/fiber"
-	"github.com/jeffemart/Gobiru/app/gin"
-	"github.com/jeffemart/Gobiru/app/models"
-	"github.com/jeffemart/Gobiru/app/mux"
-	"github.com/jeffemart/Gobiru/app/openapi"
-	"github.com/jeffemart/Gobiru/app/server"
+	"github.com/jeffemart/gobiru/internal/analyzer"
+	"github.com/jeffemart/gobiru/internal/generator"
 )
 
-const version = "1.0.0"
-
 func main() {
-	// Command flags
 	var (
-		outputFile  = flag.String("output", "docs/routes.json", "Output file path for route documentation")
-		openAPIFile = flag.String("openapi", "docs/openapi.json", "Output file path for OpenAPI specification")
-		apiTitle    = flag.String("title", "API Documentation", "API title for OpenAPI spec")
-		apiDesc     = flag.String("description", "", "API description for OpenAPI spec")
-		apiVersion  = flag.String("api-version", "1.0.0", "API version for OpenAPI spec")
-		framework   = flag.String("framework", "", "Framework to analyze (mux or gin)")
-		routerFile  = flag.String("router", "routes.go", "Path to file containing router definition")
-		serve       = flag.Bool("serve", false, "Start documentation server after generation")
-		port        = flag.Int("port", 8081, "Port for documentation server")
-		help        = flag.Bool("help", false, "Show help message")
-		showVersion = flag.Bool("version", false, "Show version")
+		framework    = flag.String("framework", "", "Framework to analyze (gin, mux, or fiber)")
+		mainFile     = flag.String("main", "", "Path to main.go file")
+		routerFile   = flag.String("router", "", "Path to routes.go file")
+		handlersFile = flag.String("handlers", "", "Path to handlers.go file")
+		outputFile   = flag.String("output", "docs/routes.json", "Output path for routes JSON")
+		openAPIFile  = flag.String("openapi", "docs/openapi.json", "Output path for OpenAPI spec")
+		title        = flag.String("title", "API Documentation", "API title")
+		description  = flag.String("description", "", "API description")
+		version      = flag.String("version", "1.0.0", "API version")
 	)
 
 	flag.Parse()
 
-	if *help {
-		showHelp()
-		return
+	// Validar parâmetros obrigatórios
+	if *framework == "" {
+		log.Fatal("Framework is required (-framework)")
+	}
+	if *mainFile == "" {
+		log.Fatal("Path to main.go is required (-main)")
+	}
+	if *routerFile == "" {
+		log.Fatal("Path to routes.go is required (-router)")
+	}
+	if *handlersFile == "" {
+		log.Fatal("Path to handlers.go is required (-handlers)")
 	}
 
-	if *showVersion {
-		fmt.Printf("Gobiru version %s\n", version)
-		return
+	// Criar analisador baseado no framework
+	a, err := analyzer.New(*framework, *mainFile, *routerFile, *handlersFile)
+	if err != nil {
+		log.Fatalf("Failed to create analyzer: %v", err)
 	}
 
-	if *framework != "gin" && *framework != "mux" && *framework != "fiber" {
-		log.Fatal("Framework must be either 'gin', 'mux', or 'fiber'")
-	}
-
-	// Determinar o arquivo fonte
-	sourceFile := *routerFile
-	if sourceFile == "" {
-		// Se não foi especificado, procurar por routes.go
-		sourceFile = findRouterFile()
-	}
-
-	if sourceFile == "" {
-		log.Fatal("Router file not found. Use -router flag or ensure routes.go exists in current directory")
-	}
-
-	// Create output directories
-	ensureDir(*outputFile)
-	if *openAPIFile != "" {
-		ensureDir(*openAPIFile)
-	}
-
-	// Generate documentation
-	routes, err := analyzeRoutes(*framework, sourceFile)
+	// Analisar rotas
+	routes, err := a.Analyze()
 	if err != nil {
 		log.Fatalf("Failed to analyze routes: %v", err)
 	}
 
-	// Export documentation
-	if err := exportDocs(routes, *outputFile, *openAPIFile, openapi.Info{
-		Title:       *apiTitle,
-		Description: *apiDesc,
-		Version:     *apiVersion,
-	}); err != nil {
-		log.Fatalf("Failed to export documentation: %v", err)
+	// Gerar documentação JSON
+	if err := generator.GenerateJSON(routes, *outputFile); err != nil {
+		log.Fatalf("Failed to generate JSON: %v", err)
 	}
 
-	fmt.Printf("Documentation generated successfully!\n")
+	// Gerar documentação OpenAPI
+	if err := generator.GenerateOpenAPI(routes, generator.APIInfo{
+		Title:       *title,
+		Description: *description,
+		Version:     *version,
+	}, *openAPIFile); err != nil {
+		log.Fatalf("Failed to generate OpenAPI: %v", err)
+	}
+
+	fmt.Println("Documentation generated successfully!")
 	fmt.Printf("Routes JSON: %s\n", *outputFile)
-	if *openAPIFile != "" {
-		fmt.Printf("OpenAPI spec: %s\n", *openAPIFile)
-	}
-
-	// Copiar index.html se não existir
-	indexPath := filepath.Join(filepath.Dir(*outputFile), "index.html")
-	if _, err := os.Stat(indexPath); os.IsNotExist(err) {
-		indexContent := `<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <title>Swagger UI - Gobiru</title>
-    <link rel="stylesheet" type="text/css" href="https://unpkg.com/swagger-ui-dist@5.11.0/swagger-ui.css" />
-    <link rel="icon" type="image/png" href="https://unpkg.com/swagger-ui-dist@5.11.0/favicon-32x32.png" sizes="32x32" />
-    <link rel="icon" type="image/png" href="https://unpkg.com/swagger-ui-dist@5.11.0/favicon-16x16.png" sizes="16x16" />
-    <style>
-        html { box-sizing: border-box; overflow: -moz-scrollbars-vertical; overflow-y: scroll; }
-        *, *:before, *:after { box-sizing: inherit; }
-        body { margin: 0; background: #fafafa; }
-    </style>
-</head>
-<body>
-    <div id="swagger-ui"></div>
-    <script src="https://unpkg.com/swagger-ui-dist@5.11.0/swagger-ui-bundle.js" crossorigin></script>
-    <script src="https://unpkg.com/swagger-ui-dist@5.11.0/swagger-ui-standalone-preset.js" crossorigin></script>
-    <script>
-        window.onload = function() {
-            window.ui = SwaggerUIBundle({
-                url: "./openapi.json",
-                dom_id: '#swagger-ui',
-                deepLinking: true,
-                presets: [SwaggerUIBundle.presets.apis, SwaggerUIStandalonePreset],
-                plugins: [SwaggerUIBundle.plugins.DownloadUrl],
-                layout: "StandaloneLayout"
-            });
-        };
-    </script>
-</body>
-</html>`
-		if err := ioutil.WriteFile(indexPath, []byte(indexContent), 0644); err != nil {
-			log.Printf("Warning: Failed to create index.html: %v", err)
-		}
-	}
-
-	// Start documentation server if requested
-	if *serve {
-		fmt.Printf("\nStarting documentation server...\n")
-		server.Serve(*port, filepath.Dir(*outputFile))
-	}
-}
-
-func showHelp() {
-	fmt.Println(`Gobiru - API Documentation Generator
-
-Usage:
-  gobiru [options] <source-file>
-
-Options:`)
-	flag.PrintDefaults()
-	fmt.Println(`
-Examples:
-  # Generate docs for a Gin application with specific router file
-  gobiru -framework gin -router api/routes.go -output docs/routes.json
-
-  # Generate docs using default routes.go
-  gobiru -framework mux -output docs/routes.json
-
-  # Full example with all options
-  gobiru -framework gin \
-         -router internal/routes/router.go \
-         -output docs/routes.json \
-         -openapi docs/openapi.json \
-         -title "My API" \
-         -description "My API description" \
-         -version "1.0.0" \
-         -serve \
-         -port 8081`)
-}
-
-func ensureDir(filePath string) {
-	// Converter caminho relativo para absoluto
-	absPath, err := filepath.Abs(filePath)
-	if err != nil {
-		log.Fatalf("Failed to get absolute path: %v", err)
-	}
-
-	dir := filepath.Dir(absPath)
-	if dir != "" {
-		if err := os.MkdirAll(dir, 0755); err != nil {
-			log.Fatalf("Failed to create directory: %v", err)
-		}
-	}
-}
-
-func analyzeRoutes(framework, sourceFile string) ([]models.RouteInfo, error) {
-	// Converter caminho relativo para absoluto
-	absPath, err := filepath.Abs(sourceFile)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get absolute path: %v", err)
-	}
-
-	var routeAnalyzer analyzer.RouteAnalyzer
-
-	switch framework {
-	case "gin":
-		routeAnalyzer = gin.NewAnalyzer()
-	case "mux":
-		routeAnalyzer = mux.NewAnalyzer()
-	case "fiber":
-		routeAnalyzer = fiber.NewAnalyzer()
-	default:
-		return nil, fmt.Errorf("unsupported framework: %s", framework)
-	}
-
-	return routeAnalyzer.AnalyzeFile(absPath)
-}
-
-func exportDocs(routes []models.RouteInfo, jsonFile, openAPIFile string, info openapi.Info) error {
-	// Export routes JSON
-	if err := exportJSON(routes, jsonFile); err != nil {
-		return fmt.Errorf("failed to export routes JSON: %v", err)
-	}
-
-	// Export OpenAPI spec if requested
-	if openAPIFile != "" {
-		spec, err := openapi.ConvertToOpenAPI(routes, info)
-		if err != nil {
-			return fmt.Errorf("failed to convert to OpenAPI: %v", err)
-		}
-
-		if err := openapi.ExportOpenAPI(spec, openAPIFile); err != nil {
-			return fmt.Errorf("failed to export OpenAPI spec: %v", err)
-		}
-	}
-
-	return nil
-}
-
-func exportJSON(routes []models.RouteInfo, filepath string) error {
-	data, err := json.MarshalIndent(routes, "", "    ")
-	if err != nil {
-		return fmt.Errorf("failed to marshal routes: %v", err)
-	}
-
-	err = os.WriteFile(filepath, data, 0644)
-	if err != nil {
-		return fmt.Errorf("failed to write file: %v", err)
-	}
-
-	return nil
-}
-
-// Função auxiliar para procurar o arquivo routes.go
-func findRouterFile() string {
-	// Primeiro procura no diretório atual
-	if _, err := os.Stat("routes.go"); err == nil {
-		return "routes.go"
-	}
-
-	// Procura em diretórios comuns
-	commonPaths := []string{
-		"internal/routes/routes.go",
-		"pkg/routes/routes.go",
-		"api/routes/routes.go",
-		"src/routes/routes.go",
-	}
-
-	for _, path := range commonPaths {
-		if _, err := os.Stat(path); err == nil {
-			return path
-		}
-	}
-
-	return ""
+	fmt.Printf("OpenAPI spec: %s\n", *openAPIFile)
 }
