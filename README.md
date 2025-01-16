@@ -4,7 +4,7 @@
        <img src="https://res.cloudinary.com/dx70wyorg/image/upload/v1736953035/photo_2025-01-15_11-40-32_esheqe.jpg" width="200" alt="Gobiru Mascot">
 </div>
 
-Gobiru é um gerador de documentação automático para APIs Go, com suporte para Gin e Gorilla Mux.
+Gobiru é um gerador de documentação automático para APIs Go, com suporte para Gin, Gorilla Mux e Fiber.
 
 ## 🚀 Instalação
 
@@ -18,7 +18,10 @@ go get github.com/jeffemart/Gobiru
 
 ## 🚀 Recursos
 
-- Suporte para Gin e Gorilla Mux
+- Suporte para múltiplos frameworks:
+  - Gin
+  - Gorilla Mux
+  - Fiber
 - Geração automática de documentação OpenAPI/Swagger
 - Interface Swagger UI embutida
 - Detecção automática de rotas e parâmetros
@@ -27,44 +30,41 @@ go get github.com/jeffemart/Gobiru
 
 ## 📝 Exemplos de Uso
 
+### Gin Framework
+```bash
+gobiru -framework gin \
+       -router routes.go \
+       -output docs/routes.json \
+       -openapi docs/openapi.json \
+       -title "Minha API Gin" \
+       -serve
+```
+
 ### Gorilla Mux
 ```bash
-# Gerar documentação para API Mux
-gobiru -framework mux -router routes.go -output docs/routes.json -openapi docs/openapi.json -serve
-
-# Executar a API
-go run main.go routes.go
+gobiru -framework mux \
+       -router routes.go \
+       -output docs/routes.json \
+       -openapi docs/openapi.json \
+       -title "Minha API Mux" \
+       -serve
 ```
 
-### Gin
+### Fiber Framework
 ```bash
-# Gerar documentação para API Gin
-gobiru -framework gin -router routes.go -output docs/routes.json -openapi docs/openapi.json -serve
-
-# Executar a API
-go run main.go routes.go
+gobiru -framework fiber \
+       -router routes.go \
+       -output docs/routes.json \
+       -openapi docs/openapi.json \
+       -title "Minha API Fiber" \
+       -serve
 ```
 
-## 📖 Uso do CLI
-
-### Comandos Básicos
-
-```bash
-# Gerar documentação usando arquivo routes.go padrão
-gobiru -framework gin -output docs/routes.json
-
-# Especificar arquivo de rotas personalizado
-gobiru -framework gin -router internal/routes/router.go -output docs/routes.json
-
-# Gerar documentação e iniciar servidor Swagger UI
-gobiru -framework mux -router api/routes.go -output docs/routes.json -openapi docs/openapi.json -serve
-```
-
-### Opções Disponíveis
+## 🔧 Opções do CLI
 
 ```bash
 Opções:
-  -framework string    Framework a ser analisado (gin ou mux)
+  -framework string    Framework a ser analisado (gin, mux ou fiber)
   -router string      Caminho do arquivo com definição do router (padrão: routes.go)
   -output string      Caminho do arquivo JSON de rotas (default "docs/routes.json")
   -openapi string     Caminho do arquivo OpenAPI/Swagger (default "docs/openapi.json")
@@ -77,108 +77,7 @@ Opções:
   -version          Mostrar versão do Gobiru
 ```
 
-### Exemplos Completos
-
-#### Para APIs usando Gin
-
-```bash
-# 1. Instalar o Gobiru
-go install github.com/jeffemart/Gobiru/cmd/gobiru@latest
-
-# 2. Em seu projeto Gin, gerar a documentação
-gobiru -framework gin \
-       -output docs/routes.json \
-       -openapi docs/openapi.json \
-       -title "Minha API Gin" \
-       -description "API de exemplo usando Gin" \
-       -api-version "1.0.0" \
-       -serve \
-       main.go
-
-# 3. Acessar a documentação
-# - Swagger UI: http://localhost:8081/docs/index.html
-# - OpenAPI JSON: http://localhost:8081/docs/openapi.json
-# - Routes JSON: http://localhost:8081/docs/routes.json
-```
-
-#### Para APIs usando Gorilla Mux
-
-```bash
-# 1. Instalar o Gobiru
-go install github.com/jeffemart/Gobiru/cmd/gobiru@latest
-
-# 2. Em seu projeto Mux, gerar a documentação
-gobiru -framework mux \
-       -output docs/routes.json \
-       -openapi docs/openapi.json \
-       -title "Minha API Mux" \
-       -description "API de exemplo usando Gorilla Mux" \
-       -api-version "1.0.0" \
-       -serve \
-       main.go
-
-# 3. Acessar a documentação
-# - Swagger UI: http://localhost:8081/docs/index.html
-# - OpenAPI JSON: http://localhost:8081/docs/openapi.json
-# - Routes JSON: http://localhost:8081/docs/routes.json
-```
-
-## 💡 Uso como Biblioteca
-
-```go
-package main
-
-import (
-    "log"
-    "github.com/gin-gonic/gin"
-    gobiru "github.com/jeffemart/Gobiru/app/gin"
-    "github.com/jeffemart/Gobiru/app/openapi"
-)
-
-func main() {
-    // Criar router Gin
-    router := gin.Default()
-    
-    // Definir rotas
-    router.GET("/users", getUsers)
-    router.POST("/users", createUser)
-    
-    // Criar analisador
-    analyzer := gobiru.NewAnalyzer()
-    
-    // Analisar rotas
-    err := analyzer.AnalyzeRoutes(router)
-    if err != nil {
-        log.Fatal(err)
-    }
-    
-    // Exportar documentação
-    info := openapi.Info{
-        Title: "Minha API",
-        Description: "Descrição da minha API",
-        Version: "1.0.0",
-    }
-    
-    err = analyzer.ExportOpenAPI("docs/openapi.json", info)
-    if err != nil {
-        log.Fatal(err)
-    }
-    
-    // Iniciar servidor
-    router.Run(":8080")
-}
-```
-
-## 🔄 Workflow Recomendado
-
-1. Instale o Gobiru globalmente
-2. Desenvolva sua API normalmente usando Gin ou Mux
-3. Use o comando `gobiru` para gerar a documentação
-4. Inicie o servidor de documentação com a flag `-serve`
-5. Acesse a documentação via Swagger UI
-6. Atualize a documentação sempre que modificar as rotas
-
-## 🤝 Contribuição
+## 🤝 Contribuindo
 
 Contribuições são bem-vindas! Por favor, leia nosso guia de contribuição antes de enviar um PR.
 

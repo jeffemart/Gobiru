@@ -9,9 +9,11 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/jeffemart/Gobiru/app"
+	"github.com/jeffemart/Gobiru/app/analyzer"
+	"github.com/jeffemart/Gobiru/app/fiber"
 	"github.com/jeffemart/Gobiru/app/gin"
 	"github.com/jeffemart/Gobiru/app/models"
+	"github.com/jeffemart/Gobiru/app/mux"
 	"github.com/jeffemart/Gobiru/app/openapi"
 	"github.com/jeffemart/Gobiru/app/server"
 )
@@ -46,8 +48,8 @@ func main() {
 		return
 	}
 
-	if *framework != "gin" && *framework != "mux" {
-		log.Fatal("Framework must be either 'gin' or 'mux'")
+	if *framework != "gin" && *framework != "mux" && *framework != "fiber" {
+		log.Fatal("Framework must be either 'gin', 'mux', or 'fiber'")
 	}
 
 	// Determinar o arquivo fonte
@@ -164,7 +166,13 @@ Examples:
 }
 
 func ensureDir(filePath string) {
-	dir := filepath.Dir(filePath)
+	// Converter caminho relativo para absoluto
+	absPath, err := filepath.Abs(filePath)
+	if err != nil {
+		log.Fatalf("Failed to get absolute path: %v", err)
+	}
+
+	dir := filepath.Dir(absPath)
 	if dir != "" {
 		if err := os.MkdirAll(dir, 0755); err != nil {
 			log.Fatalf("Failed to create directory: %v", err)
@@ -173,16 +181,26 @@ func ensureDir(filePath string) {
 }
 
 func analyzeRoutes(framework, sourceFile string) ([]models.RouteInfo, error) {
+	// Converter caminho relativo para absoluto
+	absPath, err := filepath.Abs(sourceFile)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get absolute path: %v", err)
+	}
+
+	var routeAnalyzer analyzer.RouteAnalyzer
+
 	switch framework {
 	case "gin":
-		analyzer := gin.NewAnalyzer()
-		return analyzer.AnalyzeFile(sourceFile)
+		routeAnalyzer = gin.NewAnalyzer()
 	case "mux":
-		analyzer := app.NewRouteAnalyzer()
-		return analyzer.AnalyzeFile(sourceFile)
+		routeAnalyzer = mux.NewAnalyzer()
+	case "fiber":
+		routeAnalyzer = fiber.NewAnalyzer()
 	default:
 		return nil, fmt.Errorf("unsupported framework: %s", framework)
 	}
+
+	return routeAnalyzer.AnalyzeFile(absPath)
 }
 
 func exportDocs(routes []models.RouteInfo, jsonFile, openAPIFile string, info openapi.Info) error {
