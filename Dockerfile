@@ -3,13 +3,16 @@ FROM golang:1.21-alpine AS builder
 
 WORKDIR /app
 
-# Copiar arquivos necessários
+# Copiar arquivos de dependências
 COPY go.mod go.sum ./
+
+# Download das dependências
 RUN go mod download
 
+# Copiar o código fonte
 COPY . .
 
-# Compilar o CLI
+# Compilar o binário
 RUN CGO_ENABLED=0 GOOS=linux go build -o /gobiru ./cmd/gobiru/main.go
 
 # Final stage
@@ -17,17 +20,18 @@ FROM alpine:latest
 
 WORKDIR /app
 
-# Copiar o binário compilado
+# Copiar o binário do estágio de build
 COPY --from=builder /gobiru /usr/local/bin/gobiru
 
 # Copiar arquivos estáticos
-COPY examples/test_cli/docs/index.html /app/docs/index.html
+COPY static/docs/index.html /app/docs/index.html
 
 # Expor a porta do servidor
 EXPOSE 8081
 
-# Criar um script de entrada
-COPY scripts/entrypoint.sh /entrypoint.sh
-RUN chmod +x /entrypoint.sh
+# Definir o diretório de trabalho padrão
+VOLUME /work
+WORKDIR /work
 
-ENTRYPOINT ["/entrypoint.sh"] 
+# Comando padrão
+ENTRYPOINT ["gobiru"] 
