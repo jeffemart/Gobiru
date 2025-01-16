@@ -23,7 +23,6 @@ func (ga *GinAnalyzer) GetTemplateMain() string {
 import (
 	"encoding/json"
 	"fmt"
-	"net/http"
 	"os"
 	"strings"
 	"github.com/gin-gonic/gin"

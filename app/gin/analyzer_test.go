@@ -8,7 +8,7 @@ import (
 
 func TestGinAnalyzer(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	router := gin.Default()
+	router := gin.New()
 
 	// Setup test routes
 	router.GET("/users", func(c *gin.Context) {})
@@ -16,11 +16,6 @@ func TestGinAnalyzer(t *testing.T) {
 	router.POST("/users", func(c *gin.Context) {})
 
 	analyzer := NewAnalyzer()
-	err := analyzer.AnalyzeRoutes(router)
-	if err != nil {
-		t.Fatalf("Failed to analyze routes: %v", err)
-	}
-
 	routes := analyzer.GetRoutes()
 
 	// Verify number of routes
@@ -41,14 +36,33 @@ func TestGinAnalyzer(t *testing.T) {
 	}
 }
 
-func TestAnalyzeFile(t *testing.T) {
+func TestGinAnalyzerWithRouterFile(t *testing.T) {
 	analyzer := NewAnalyzer()
-	routes, err := analyzer.AnalyzeFile("testdata/example.go")
+	routes, err := analyzer.AnalyzeFile("../../examples/gin_test/routes.go")
 	if err != nil {
-		t.Fatalf("Failed to analyze file: %v", err)
+		t.Fatalf("Failed to analyze routes: %v", err)
 	}
 
+	// Verify routes were parsed
 	if len(routes) == 0 {
-		t.Error("Expected routes to be analyzed, got none")
+		t.Error("Expected routes to be parsed, got none")
+	}
+
+	// Verify specific routes
+	foundUserRoute := false
+	for _, route := range routes {
+		if route.Path == "/users/:id" {
+			foundUserRoute = true
+			if len(route.Parameters) != 1 {
+				t.Errorf("Expected 1 parameter for /users/:id, got %d", len(route.Parameters))
+			}
+			if route.Parameters[0].Name != "id" {
+				t.Errorf("Expected parameter name 'id', got '%s'", route.Parameters[0].Name)
+			}
+		}
+	}
+
+	if !foundUserRoute {
+		t.Error("Expected to find /users/:id route")
 	}
 }
