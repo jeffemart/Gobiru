@@ -94,7 +94,13 @@ func ConvertToOpenAPI(routes []models.RouteInfo, info Info) (*OpenAPISpec, error
 	spec := &OpenAPISpec{
 		OpenAPI: "3.0.3",
 		Info:    info,
-		Paths:   make(map[string]PathItem),
+		Servers: []Server{
+			{
+				URL:         "/",
+				Description: "API Server",
+			},
+		},
+		Paths: make(map[string]PathItem),
 		Components: Components{
 			SecuritySchemes: map[string]SecurityScheme{
 				"bearerAuth": {

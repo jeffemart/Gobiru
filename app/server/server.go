@@ -4,10 +4,15 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 )
 
 // Serve starts the documentation server
 func Serve(port int, docsDir string) error {
+	if _, err := os.Stat(docsDir); os.IsNotExist(err) {
+		return fmt.Errorf("documentation directory '%s' does not exist", docsDir)
+	}
+
 	// Servir arquivos estáticos do diretório docs
 	fs := http.FileServer(http.Dir(docsDir))
 	http.Handle("/docs/", http.StripPrefix("/docs/", fs))
