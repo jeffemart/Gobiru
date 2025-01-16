@@ -27,7 +27,7 @@ func main() {
 		apiDesc     = flag.String("description", "", "API description for OpenAPI spec")
 		apiVersion  = flag.String("api-version", "1.0.0", "API version for OpenAPI spec")
 		framework   = flag.String("framework", "", "Framework to analyze (mux or gin)")
-		routerFile  = flag.String("router", "", "Path to file containing router definition (defaults to routes.go)")
+		routerFile  = flag.String("router", "routes.go", "Path to file containing router definition")
 		serve       = flag.Bool("serve", false, "Start documentation server after generation")
 		port        = flag.Int("port", 8081, "Port for documentation server")
 		help        = flag.Bool("help", false, "Show help message")
