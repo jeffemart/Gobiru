@@ -3,32 +3,70 @@ package handlers
 import (
 	"encoding/json"
 	"net/http"
+	"time"
 
+	"github.com/google/uuid"
 	"github.com/gorilla/mux"
 )
 
-type User struct {
-	ID   string `json:"id"`
-	Name string `json:"name"`
+type CreateProductRequest struct {
+	Name        string   `json:"name" validate:"required"`
+	Description string   `json:"description" validate:"required"`
+	Price       float64  `json:"price" validate:"required,gt=0"`
+	Categories  []string `json:"categories" validate:"required,min=1"`
+	SKU         string   `json:"sku" validate:"required"`
 }
 
-func ListUsers(w http.ResponseWriter, r *http.Request) {
-	users := []User{
-		{ID: "1", Name: "User 1"},
-		{ID: "2", Name: "User 2"},
-	}
-	json.NewEncoder(w).Encode(users)
+type ProductResponse struct {
+	ID          string    `json:"id"`
+	StoreID     string    `json:"store_id"`
+	CategoryID  string    `json:"category_id"`
+	Name        string    `json:"name"`
+	Description string    `json:"description"`
+	Price       float64   `json:"price"`
+	Categories  []string  `json:"categories"`
+	SKU         string    `json:"sku"`
+	CreatedAt   time.Time `json:"created_at"`
+	UpdatedAt   time.Time `json:"updated_at"`
 }
 
-func GetUser(w http.ResponseWriter, r *http.Request) {
+type ErrorResponse struct {
+	Code    string `json:"code"`
+	Message string `json:"message"`
+	Details string `json:"details,omitempty"`
+}
+
+func CreateProduct(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
-	user := User{ID: vars["id"], Name: "User " + vars["id"]}
-	json.NewEncoder(w).Encode(user)
-}
+	storeID := vars["storeId"]
+	categoryID := vars["categoryId"]
 
-func CreateUser(w http.ResponseWriter, r *http.Request) {
-	var user User
-	json.NewDecoder(r.Body).Decode(&user)
+	var req CreateProductRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(ErrorResponse{
+			Code:    "INVALID_REQUEST",
+			Message: "Invalid request body",
+			Details: err.Error(),
+		})
+		return
+	}
+
+	// Simular criação do produto
+	product := ProductResponse{
+		ID:          uuid.New().String(),
+		StoreID:     storeID,
+		CategoryID:  categoryID,
+		Name:        req.Name,
+		Description: req.Description,
+		Price:       req.Price,
+		Categories:  req.Categories,
+		SKU:         req.SKU,
+		CreatedAt:   time.Now(),
+		UpdatedAt:   time.Now(),
+	}
+
+	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(user)
+	json.NewEncoder(w).Encode(product)
 }

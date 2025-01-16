@@ -2,7 +2,6 @@ package main
 
 import (
 	"flag"
-	"fmt"
 	"log"
 
 	"github.com/jeffemart/gobiru/internal/analyzer"
@@ -15,11 +14,11 @@ func main() {
 		mainFile     = flag.String("main", "", "Path to main.go file")
 		routerFile   = flag.String("router", "", "Path to routes.go file")
 		handlersFile = flag.String("handlers", "", "Path to handlers.go file")
-		outputFile   = flag.String("output", "docs/routes.json", "Output path for routes JSON")
-		openAPIFile  = flag.String("openapi", "docs/openapi.json", "Output path for OpenAPI spec")
-		title        = flag.String("title", "API Documentation", "API title")
-		description  = flag.String("description", "", "API description")
-		version      = flag.String("version", "1.0.0", "API version")
+		outputFile   = flag.String("output", "", "Path to output JSON file")
+		openAPIFile  = flag.String("openapi", "", "Path to output OpenAPI file")
+		title        = flag.String("title", "", "Title for OpenAPI documentation")
+		description  = flag.String("description", "", "Description for OpenAPI documentation")
+		version      = flag.String("version", "", "Version for OpenAPI documentation")
 	)
 
 	flag.Parse()
@@ -39,32 +38,40 @@ func main() {
 	}
 
 	// Criar analisador baseado no framework
-	a, err := analyzer.New(*framework, *mainFile, *routerFile, *handlersFile)
+	analyzer, err := analyzer.New(*framework, *mainFile, *routerFile, *handlersFile)
 	if err != nil {
 		log.Fatalf("Failed to create analyzer: %v", err)
 	}
 
-	// Analisar rotas
-	routes, err := a.Analyze()
+	doc, err := analyzer.Analyze()
 	if err != nil {
 		log.Fatalf("Failed to analyze routes: %v", err)
 	}
 
-	// Gerar documentação JSON
-	if err := generator.GenerateJSON(routes, *outputFile); err != nil {
-		log.Fatalf("Failed to generate JSON: %v", err)
+	// Configurações para geração da documentação
+	jsonConfig := generator.Config{
+		OutputFile: *outputFile,
 	}
 
-	// Gerar documentação OpenAPI
-	if err := generator.GenerateOpenAPI(routes, generator.APIInfo{
+	openapiConfig := generator.Config{
+		OutputFile:  *openAPIFile,
 		Title:       *title,
 		Description: *description,
 		Version:     *version,
-	}, *openAPIFile); err != nil {
-		log.Fatalf("Failed to generate OpenAPI: %v", err)
 	}
 
-	fmt.Println("Documentation generated successfully!")
-	fmt.Printf("Routes JSON: %s\n", *outputFile)
-	fmt.Printf("OpenAPI spec: %s\n", *openAPIFile)
+	// Gerar documentação
+	jsonGen := generator.NewJSONGenerator()
+	if err := jsonGen.Generate(doc, jsonConfig); err != nil {
+		log.Fatalf("Failed to generate JSON documentation: %v", err)
+	}
+
+	openapiGen := generator.NewOpenAPIGenerator()
+	if err := openapiGen.Generate(doc, openapiConfig); err != nil {
+		log.Fatalf("Failed to generate OpenAPI documentation: %v", err)
+	}
+
+	log.Printf("Documentation generated successfully!")
+	log.Printf("JSON documentation: %s", *outputFile)
+	log.Printf("OpenAPI documentation: %s", *openAPIFile)
 }
