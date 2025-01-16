@@ -1,93 +1,81 @@
-# Gobiru 
+# Gobiru - API Documentation Generator
 
-<div align="left">
-       <img src="https://res.cloudinary.com/dx70wyorg/image/upload/v1736953035/photo_2025-01-15_11-40-32_esheqe.jpg" width="200" alt="Gobiru Mascot">
-</div>
+Gobiru é uma ferramenta de linha de comando para gerar documentação de APIs Go automaticamente, suportando os frameworks Gin, Gorilla Mux e Fiber.
 
-Gobiru é um gerador de documentação automático para APIs Go, com suporte para Gin, Gorilla Mux e Fiber.
-
-## 🚀 Instalação
+## Instalação
 
 ```bash
-# Instalar o CLI globalmente
-go install github.com/jeffemart/Gobiru/cmd/gobiru@latest
-
-# Ou adicionar como dependência em seu projeto
-go get github.com/jeffemart/Gobiru
+go install github.com/jeffemart/gobiru/cmd/gobiru@latest
 ```
 
-## 🚀 Recursos
+## Uso
 
-- Suporte para múltiplos frameworks:
-  - Gin
-  - Gorilla Mux
-  - Fiber
-- Geração automática de documentação OpenAPI/Swagger
-- Interface Swagger UI embutida
-- Detecção automática de rotas e parâmetros
-- Servidor de documentação integrado
-- Personalização via flags de comando
+O Gobiru requer três arquivos principais do seu projeto:
+- main.go: Arquivo principal da aplicação
+- routes.go: Arquivo com as definições das rotas
+- handlers.go: Arquivo com os handlers da API
 
-## 📝 Exemplos de Uso
-
-### Gin Framework
 ```bash
-gobiru -framework gin \
-       -router routes.go \
+gobiru -framework [gin|mux|fiber] \
+       -main path/to/main.go \
+       -router path/to/routes.go \
+       -handlers path/to/handlers.go \
        -output docs/routes.json \
        -openapi docs/openapi.json \
-       -title "Minha API Gin" \
-       -serve
+       -title "Minha API" \
+       -description "Descrição da minha API" \
+       -version "1.0.0"
 ```
+
+### Flags Disponíveis
+
+- `-framework`: Framework utilizado (gin, mux, ou fiber)
+- `-main`: Caminho para o arquivo main.go
+- `-router`: Caminho para o arquivo routes.go
+- `-handlers`: Caminho para o arquivo handlers.go
+- `-output`: Caminho para o arquivo JSON de saída (default: docs/routes.json)
+- `-openapi`: Caminho para o arquivo OpenAPI (default: docs/openapi.json)
+- `-title`: Título da API para documentação OpenAPI
+- `-description`: Descrição da API
+- `-version`: Versão da API
+
+## Exemplos
+
+O repositório inclui exemplos para cada framework suportado:
 
 ### Gorilla Mux
 ```bash
 gobiru -framework mux \
-       -router routes.go \
-       -output docs/routes.json \
-       -openapi docs/openapi.json \
-       -title "Minha API Mux" \
-       -serve
+       -main examples/mux/simple/main.go \
+       -router examples/mux/simple/main.go \
+       -handlers examples/mux/simple/main.go
 ```
 
-### Fiber Framework
+### Gin
+```bash
+gobiru -framework gin \
+       -main examples/gin/simple/main.go \
+       -router examples/gin/simple/main.go \
+       -handlers examples/gin/simple/main.go
+```
+
+### Fiber
 ```bash
 gobiru -framework fiber \
-       -router routes.go \
-       -output docs/routes.json \
-       -openapi docs/openapi.json \
-       -title "Minha API Fiber" \
-       -serve
+       -main examples/fiber/simple/main.go \
+       -router examples/fiber/simple/main.go \
+       -handlers examples/fiber/simple/main.go
 ```
 
-## 🔧 Opções do CLI
+## Desenvolvimento
 
-```bash
-Opções:
-  -framework string    Framework a ser analisado (gin, mux ou fiber)
-  -router string      Caminho do arquivo com definição do router (padrão: routes.go)
-  -output string      Caminho do arquivo JSON de rotas (default "docs/routes.json")
-  -openapi string     Caminho do arquivo OpenAPI/Swagger (default "docs/openapi.json")
-  -title string       Título da API para spec OpenAPI (default "API Documentation")
-  -description string Descrição da API para spec OpenAPI
-  -api-version string Versão da API para spec OpenAPI (default "1.0.0")
-  -serve             Iniciar servidor de documentação após geração
-  -port int          Porta do servidor de documentação (default 8081)
-  -help             Mostrar mensagem de ajuda
-  -version          Mostrar versão do Gobiru
-```
+Para contribuir com o projeto:
 
-## 🤝 Contribuindo
+1. Clone o repositório
+2. Instale as dependências: `go mod download`
+3. Execute os testes: `make test`
+4. Faça o build: `make build`
 
-Contribuições são bem-vindas! Por favor, leia nosso guia de contribuição antes de enviar um PR.
+## Licença
 
-## 📝 Licença
-
-MIT License - veja o arquivo [LICENSE](LICENSE) para detalhes.
-
-## 📞 Suporte
-
-- Abra uma issue no GitHub
-- Entre em contato via [LinkedIn](https://www.linkedin.com/in/jefferson-martins-dev/)
-- Email: jefferson.developers@gmail.com
-```
+MIT License

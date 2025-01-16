@@ -1,21 +1,35 @@
-.PHONY: build test run docker-build docker-run clean
+.PHONY: build test clean
 
+# Variáveis
+BINARY_NAME=gobiru
+BUILD_DIR=bin
+
+# Comandos
 build:
-	go build -o gobiru ./cmd/gobiru/main.go
+	@echo "Building..."
+	@go build -o $(BUILD_DIR)/$(BINARY_NAME) cmd/gobiru/main.go
 
 test:
-	go test -v ./...
-
-run: build
-	./gobiru -output docs/routes.json -openapi docs/openapi.json examples/test_cli/routes.go
-	go run examples/test_cli/server.go
-
-docker-build:
-	docker build -t gobiru .
-
-docker-run: docker-build
-	docker run -p 8081:8081 gobiru
+	@echo "Running tests..."
+	@go test ./...
 
 clean:
-	rm -f gobiru
-	rm -rf docs/ 
+	@echo "Cleaning..."
+	@rm -rf $(BUILD_DIR)
+
+install:
+	@echo "Installing..."
+	@go install ./cmd/gobiru
+
+# Exemplos
+example-mux:
+	@echo "Running Mux example..."
+	@go run examples/mux/simple/main.go
+
+example-gin:
+	@echo "Running Gin example..."
+	@go run examples/gin/simple/main.go
+
+example-fiber:
+	@echo "Running Fiber example..."
+	@go run examples/fiber/simple/main.go 
