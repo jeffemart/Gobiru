@@ -2,9 +2,8 @@ version: '3.8'
 
 services:
   gobiru:
-    build: .
+    image: ghcr.io/jeffemart/gobiru:latest
     ports:
       - "8081:8081"
     volumes:
-      - ./examples/test_cli/routes.go:/app/routes.go
-      - ./docs:/app/docs 
+      - ./examples:/app/examples 
