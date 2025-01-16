@@ -18,16 +18,8 @@ RUN CGO_ENABLED=0 GOOS=linux go build -o /gobiru ./cmd/gobiru/main.go
 # Final stage
 FROM alpine:latest
 
-WORKDIR /app
-
 # Copiar o binário do estágio de build
 COPY --from=builder /gobiru /usr/local/bin/gobiru
-
-# Criar diretório docs
-RUN mkdir -p /app/docs
-
-# Copiar arquivos estáticos
-COPY static/docs/index.html /app/docs/index.html
 
 # Expor a porta do servidor
 EXPOSE 8081
