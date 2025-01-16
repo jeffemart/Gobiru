@@ -3,12 +3,12 @@ package analyzer
 import (
 	"fmt"
 
-	"github.com/jeffemart/gobiru/internal/models"
+	"github.com/jeffemart/gobiru/internal/spec"
 )
 
 // Analyzer define a interface para análise de rotas
 type Analyzer interface {
-	Analyze() ([]models.RouteInfo, error)
+	Analyze() (*spec.Documentation, error)
 }
 
 // Config contém as configurações para análise
@@ -21,7 +21,6 @@ type Config struct {
 // BaseAnalyzer contém a implementação comum para todos os analisadores
 type BaseAnalyzer struct {
 	config Config
-	routes []models.RouteInfo
 }
 
 // New cria um novo analisador baseado no framework

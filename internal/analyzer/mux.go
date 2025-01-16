@@ -7,7 +7,7 @@ import (
 	"go/token"
 	"strings"
 
-	"github.com/jeffemart/gobiru/internal/models"
+	"github.com/jeffemart/gobiru/internal/spec"
 )
 
 type MuxAnalyzer struct {
@@ -22,10 +22,9 @@ func NewMuxAnalyzer(config Config) *MuxAnalyzer {
 	}
 }
 
-func (a *MuxAnalyzer) Analyze() ([]models.RouteInfo, error) {
+func (a *MuxAnalyzer) Analyze() (*spec.Documentation, error) {
 	fset := token.NewFileSet()
 
-	// Analisar arquivos
 	routerFile, err := parser.ParseFile(fset, a.config.RouterFile, nil, parser.ParseComments)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse router file: %v", err)
@@ -36,101 +35,119 @@ func (a *MuxAnalyzer) Analyze() ([]models.RouteInfo, error) {
 		return nil, fmt.Errorf("failed to parse handlers file: %v", err)
 	}
 
-	var routes []models.RouteInfo
+	var routes []struct {
+		Path        string
+		Method      string
+		HandlerName string
+	}
 
-	// Encontrar estruturas para schemas
-	schemas := make(map[string]interface{})
-	ast.Inspect(handlersFile, func(n ast.Node) bool {
-		typeSpec, ok := n.(*ast.TypeSpec)
-		if !ok {
-			return true
-		}
-		if structType, ok := typeSpec.Type.(*ast.StructType); ok {
-			schemas[typeSpec.Name.Name] = extractSchema(structType)
-		}
-		return true
-	})
+	// Função para construir o caminho completo da rota
+	var currentPath []string
 
-	// Analisar rotas
 	ast.Inspect(routerFile, func(n ast.Node) bool {
-		callExpr, ok := n.(*ast.CallExpr)
-		if !ok {
-			return true
-		}
-
-		if sel, ok := callExpr.Fun.(*ast.SelectorExpr); ok {
-			if sel.Sel.Name == "HandleFunc" {
-				route := models.RouteInfo{
-					Version: "v1.0",
-					RateLimit: models.RateLimitConfig{
-						RequestsPerMinute: 100,
-						TimeWindowSeconds: 60,
-					},
-				}
-
-				// Extrair path
-				if len(callExpr.Args) > 0 {
-					if lit, ok := callExpr.Args[0].(*ast.BasicLit); ok {
-						route.Path = strings.Trim(lit.Value, "\"")
-						route.Parameters = extractPathParams(route.Path)
-					}
-				}
-
-				// Extrair handler
-				if len(callExpr.Args) > 1 {
-					if ident, ok := callExpr.Args[1].(*ast.Ident); ok {
-						route.HandlerName = ident.Name
-
-						// Analisar função handler
-						if handlerFunc := findFunction(handlersFile, ident.Name); handlerFunc != nil {
-							route.Description = extractDescription(handlerFunc)
-							route.Request = extractRequestBody(handlerFunc, schemas)
-							route.Responses = extractResponses(handlerFunc, schemas)
+		switch node := n.(type) {
+		case *ast.CallExpr:
+			// Capturar PathPrefix e HandleFunc
+			if sel, ok := node.Fun.(*ast.SelectorExpr); ok {
+				switch sel.Sel.Name {
+				case "PathPrefix":
+					if len(node.Args) > 0 {
+						if lit, ok := node.Args[0].(*ast.BasicLit); ok {
+							prefix := strings.Trim(lit.Value, "\"")
+							currentPath = append(currentPath, prefix)
 						}
 					}
-				}
+				case "HandleFunc":
+					if len(node.Args) >= 2 {
+						route := struct {
+							Path        string
+							Method      string
+							HandlerName string
+						}{}
 
-				// Extrair método e query params
-				parent := findParentCall(n)
-				if parent != nil {
-					if sel, ok := parent.Fun.(*ast.SelectorExpr); ok {
-						if sel.Sel.Name == "Methods" {
-							if len(parent.Args) > 0 {
-								if lit, ok := parent.Args[0].(*ast.BasicLit); ok {
-									route.Method = strings.Trim(lit.Value, "\"")
+						// Construir caminho completo
+						if lit, ok := node.Args[0].(*ast.BasicLit); ok {
+							subPath := strings.Trim(lit.Value, "\"")
+							fullPath := strings.Join(currentPath, "") + subPath
+							route.Path = strings.TrimRight(fullPath, "/")
+						}
+
+						// Extrair handler
+						if ident, ok := node.Args[1].(*ast.Ident); ok {
+							route.HandlerName = ident.Name
+						} else if sel, ok := node.Args[1].(*ast.SelectorExpr); ok {
+							route.HandlerName = sel.Sel.Name
+						}
+
+						// Procurar pelo método HTTP
+						ast.Inspect(n, func(m ast.Node) bool {
+							if call, ok := m.(*ast.CallExpr); ok {
+								if methodSel, ok := call.Fun.(*ast.SelectorExpr); ok {
+									if methodSel.Sel.Name == "Methods" && len(call.Args) > 0 {
+										if lit, ok := call.Args[0].(*ast.BasicLit); ok {
+											route.Method = strings.Trim(lit.Value, "\"")
+										}
+									}
 								}
 							}
+							return true
+						})
+
+						if route.Path != "" && route.HandlerName != "" {
+							if route.Method == "" {
+								route.Method = "GET" // Método padrão
+							}
+							routes = append(routes, route)
 						}
 					}
+				case "Subrouter":
+					// Manter o caminho atual para o subrouter
+					return true
 				}
-
-				// Extrair query params
-				queryParams := extractQueryParams(n)
-				if len(queryParams) > 0 {
-					route.QueryParams = queryParams
-				}
-
-				routes = append(routes, route)
 			}
 		}
-
 		return true
 	})
 
-	return routes, nil
+	doc := &spec.Documentation{
+		Operations: make([]*spec.Operation, 0),
+	}
+
+	for _, route := range routes {
+		operation := &spec.Operation{
+			Path:       route.Path,
+			Method:     strings.ToUpper(route.Method),
+			Parameters: extractMuxParameters(route.Path),
+			Responses:  make(map[string]*spec.Response),
+		}
+
+		if handlerFunc := findFunction(handlersFile, route.HandlerName); handlerFunc != nil {
+			operation.Summary = extractSummaryFromComments(handlerFunc)
+			operation.RequestBody = extractRequestBody(handlerFunc, a.config.HandlersFile)
+			operation.Responses = extractResponses(handlerFunc, a.config.HandlersFile)
+		}
+
+		doc.Operations = append(doc.Operations, operation)
+	}
+
+	return doc, nil
 }
 
-func extractPathParams(path string) []models.Parameter {
-	var params []models.Parameter
-	parts := strings.Split(path, "/")
+func extractMuxParameters(path string) []*spec.Parameter {
+	params := make([]*spec.Parameter, 0)
+	segments := strings.Split(path, "/")
 
-	for _, part := range parts {
-		if strings.HasPrefix(part, "{") && strings.HasSuffix(part, "}") {
-			name := strings.Trim(part, "{}")
-			params = append(params, models.Parameter{
-				Name:     name,
-				Type:     "string",
-				Required: true,
+	for _, segment := range segments {
+		if strings.HasPrefix(segment, "{") && strings.HasSuffix(segment, "}") {
+			paramName := strings.Trim(segment, "{}")
+			params = append(params, &spec.Parameter{
+				Name:        paramName,
+				In:          "path",
+				Required:    true,
+				Description: fmt.Sprintf("Path parameter: %s", paramName),
+				Schema: &spec.Schema{
+					Type: "string",
+				},
 			})
 		}
 	}
@@ -138,8 +155,8 @@ func extractPathParams(path string) []models.Parameter {
 	return params
 }
 
-func extractQueryParams(node ast.Node) []models.Parameter {
-	var params []models.Parameter
+func extractQueryParams(node ast.Node) []*spec.Parameter {
+	params := make([]*spec.Parameter, 0)
 
 	ast.Inspect(node, func(n ast.Node) bool {
 		if call, ok := n.(*ast.CallExpr); ok {
@@ -153,10 +170,13 @@ func extractQueryParams(node ast.Node) []models.Parameter {
 									paramPattern := strings.Trim(pattern.Value, "\"")
 									required := !strings.HasSuffix(paramPattern, "?")
 
-									params = append(params, models.Parameter{
+									params = append(params, &spec.Parameter{
 										Name:     paramName,
-										Type:     "string",
+										In:       "query",
 										Required: required,
+										Schema: &spec.Schema{
+											Type: "string",
+										},
 									})
 								}
 							}
@@ -209,83 +229,3 @@ func findFunction(file *ast.File, name string) *ast.FuncDecl {
 	}
 	return nil
 }
-
-func extractDescription(fn *ast.FuncDecl) string {
-	if fn.Doc != nil {
-		return fn.Doc.Text()
-	}
-	return ""
-}
-
-func extractRequestBody(fn *ast.FuncDecl, schemas map[string]interface{}) models.RequestBody {
-	// Procurar por decodificação de JSON no corpo da função
-	var reqBody models.RequestBody
-	ast.Inspect(fn.Body, func(n ast.Node) bool {
-		if call, ok := n.(*ast.CallExpr); ok {
-			if sel, ok := call.Fun.(*ast.SelectorExpr); ok {
-				if sel.Sel.Name == "Decode" || sel.Sel.Name == "ShouldBindJSON" {
-					if len(call.Args) > 0 {
-						if star, ok := call.Args[0].(*ast.UnaryExpr); ok {
-							if ident, ok := star.X.(*ast.Ident); ok {
-								reqBody.Type = ident.Name
-								if schema, ok := schemas[ident.Name]; ok {
-									reqBody.Schema = schema
-								}
-							}
-						}
-					}
-				}
-			}
-		}
-		return true
-	})
-	return reqBody
-}
-
-func extractResponses(fn *ast.FuncDecl, schemas map[string]interface{}) []models.Response {
-	var responses []models.Response
-
-	// Procurar por WriteHeader e Encode no corpo da função
-	ast.Inspect(fn.Body, func(n ast.Node) bool {
-		if call, ok := n.(*ast.CallExpr); ok {
-			if sel, ok := call.Fun.(*ast.SelectorExpr); ok {
-				switch sel.Sel.Name {
-				case "WriteHeader":
-					if len(call.Args) > 0 {
-						if ident, ok := call.Args[0].(*ast.Ident); ok {
-							responses = append(responses, models.Response{
-								StatusCode:  200, // valor padrão
-								Description: ident.Name,
-							})
-						}
-					}
-				case "Encode":
-					if len(call.Args) > 0 {
-						if ident, ok := call.Args[0].(*ast.Ident); ok {
-							if len(responses) > 0 {
-								lastResponse := &responses[len(responses)-1]
-								lastResponse.Type = ident.Name
-								if schema, ok := schemas[ident.Name]; ok {
-									lastResponse.Schema = schema
-								}
-							}
-						}
-					}
-				}
-			}
-		}
-		return true
-	})
-
-	// Se nenhuma resposta foi encontrada, adicionar 200 OK como padrão
-	if len(responses) == 0 {
-		responses = append(responses, models.Response{
-			StatusCode:  200,
-			Description: "OK",
-		})
-	}
-
-	return responses
-}
-
-// ... outras funções auxiliares

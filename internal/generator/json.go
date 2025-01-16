@@ -2,31 +2,49 @@ package generator
 
 import (
 	"encoding/json"
-	"fmt"
 	"os"
 	"path/filepath"
 
-	"github.com/jeffemart/gobiru/internal/models"
+	"github.com/jeffemart/gobiru/internal/spec"
 )
 
-// GenerateJSON gera a documentação em formato JSON
-func GenerateJSON(routes []models.RouteInfo, outputFile string) error {
+type JSONGenerator struct{}
+
+func NewJSONGenerator() *JSONGenerator {
+	return &JSONGenerator{}
+}
+
+func (g *JSONGenerator) Generate(doc *spec.Documentation, config Config) error {
+	operations := make([]map[string]interface{}, 0)
+
+	for _, op := range doc.Operations {
+		operation := map[string]interface{}{
+			"path":        op.Path,
+			"method":      op.Method,
+			"summary":     op.Summary,
+			"parameters":  convertParameters(op.Parameters),
+			"requestBody": convertRequestBody(op.RequestBody),
+			"responses":   convertResponses(op.Responses),
+		}
+		operations = append(operations, operation)
+	}
+
+	return writeJSON(config.OutputFile, operations)
+}
+
+func writeJSON(filename string, data interface{}) error {
 	// Criar diretório se não existir
-	dir := filepath.Dir(outputFile)
+	dir := filepath.Dir(filename)
 	if err := os.MkdirAll(dir, 0755); err != nil {
-		return fmt.Errorf("failed to create directory: %v", err)
+		return err
 	}
 
-	// Gerar JSON
-	data, err := json.MarshalIndent(routes, "", "    ")
+	// Converter para JSON
+	jsonData, err := json.MarshalIndent(data, "", "  ")
 	if err != nil {
-		return fmt.Errorf("failed to marshal routes: %v", err)
+		return err
 	}
 
-	// Salvar arquivo
-	if err := os.WriteFile(outputFile, data, 0644); err != nil {
-		return fmt.Errorf("failed to write file: %v", err)
-	}
-
-	return nil
+	// Escrever arquivo
+	return os.WriteFile(filename, jsonData, 0644)
 }

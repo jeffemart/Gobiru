@@ -1,20 +1,20 @@
 package routes
 
 import (
-	"github.com/gofiber/fiber/v2"
 	"github.com/jeffemart/gobiru/examples/fiber/handlers"
+
+	"github.com/gofiber/fiber/v2"
 )
 
-func SetupRouter() *fiber.App {
-	app := fiber.New()
+func SetupRoutes(app *fiber.App) {
+	// API v1
+	v1 := app.Group("/api/v1")
 
-	app.Get("/users", handlers.ListUsers)
-	app.Get("/merda/:id", handlers.GetUser)
-	app.Post("/users", handlers.CreateUser)
-	app.Put("/users/:id", handlers.UpdateUser)
-	app.Delete("/users/:id", handlers.DeleteUser)
-	app.Get("/users/:userId/posts/:postId", handlers.GetUserPost)
-	app.Get("/search", handlers.SearchUsers)
+	// Organizações e Times
+	orgs := v1.Group("/organizations/:orgId")
+	teams := orgs.Group("/teams/:teamId")
 
-	return app
+	// Usuários
+	users := teams.Group("/users")
+	users.Post("/", handlers.CreateUser) // Criar usuário
 }

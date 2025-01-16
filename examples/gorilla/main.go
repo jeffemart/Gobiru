@@ -4,10 +4,10 @@ import (
 	"log"
 	"net/http"
 
-	"github.com/jeffemart/Gobiru/examples/gorilla/complete/routes"
+	"github.com/jeffemart/gobiru/examples/gorilla/routes"
 )
 
 func main() {
-	router := routes.SetupRouter()
-	log.Fatal(http.ListenAndServe(":8080", router))
+	r := routes.SetupRoutes()
+	log.Fatal(http.ListenAndServe(":3000", r))
 }

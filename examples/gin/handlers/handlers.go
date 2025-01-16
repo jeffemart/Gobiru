@@ -2,96 +2,82 @@ package handlers
 
 import (
 	"net/http"
+	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 )
 
-type User struct {
-	ID    string `json:"id"`
-	Name  string `json:"name"`
-	Email string `json:"email"`
-	Type  string `json:"type"`
-	Posts []Post `json:"posts,omitempty"`
+type CreateOrderRequest struct {
+	CustomerID   string       `json:"customer_id" validate:"required"`
+	Items        []OrderItem  `json:"items" validate:"required,min=1"`
+	ShippingInfo ShippingInfo `json:"shipping_info" validate:"required"`
+	PaymentInfo  PaymentInfo  `json:"payment_info" validate:"required"`
+	Notes        string       `json:"notes"`
+	Status       string       `json:"status" validate:"required,oneof=pending processing confirmed"`
 }
 
-type Post struct {
-	ID      string `json:"id"`
-	Title   string `json:"title"`
-	Content string `json:"content"`
+type OrderItem struct {
+	ProductID string  `json:"product_id" validate:"required"`
+	Quantity  int     `json:"quantity" validate:"required,gt=0"`
+	Price     float64 `json:"price" validate:"required,gt=0"`
 }
 
-func ListUsers(c *gin.Context) {
-	page := c.DefaultQuery("page", "1")
-	limit := c.DefaultQuery("limit", "10")
-
-	users := []User{
-		{ID: "1", Name: "User 1", Email: "user1@example.com", Type: "user"},
-		{ID: "2", Name: "User 2", Email: "user2@example.com", Type: "admin"},
-	}
-	c.JSON(http.StatusOK, users)
+type ShippingInfo struct {
+	Address    string  `json:"address" validate:"required"`
+	City       string  `json:"city" validate:"required"`
+	PostalCode string  `json:"postal_code" validate:"required"`
+	Country    string  `json:"country" validate:"required"`
+	Cost       float64 `json:"cost" validate:"required,gte=0"`
+	Method     string  `json:"method" validate:"required"`
 }
 
-func GetUser(c *gin.Context) {
-	id := c.Param("id")
-	user := User{
-		ID:    id,
-		Name:  "User " + id,
-		Email: "user" + id + "@example.com",
-		Type:  "user",
-	}
-	c.JSON(http.StatusOK, user)
+type PaymentInfo struct {
+	Method string  `json:"method" validate:"required,oneof=credit_card debit_card bank_transfer"`
+	Total  float64 `json:"total" validate:"required,gt=0"`
+	Status string  `json:"status" validate:"required"`
 }
 
-func CreateUser(c *gin.Context) {
-	var user User
-	if err := c.ShouldBindJSON(&user); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+type OrderResponse struct {
+	ID           string       `json:"id"`
+	StoreID      string       `json:"store_id"`
+	CustomerID   string       `json:"customer_id"`
+	Items        []OrderItem  `json:"items"`
+	ShippingInfo ShippingInfo `json:"shipping_info"`
+	PaymentInfo  PaymentInfo  `json:"payment_info"`
+	Notes        string       `json:"notes"`
+	Status       string       `json:"status"`
+	CreatedAt    time.Time    `json:"created_at"`
+	UpdatedAt    time.Time    `json:"updated_at"`
+}
+
+func CreateOrder(c *gin.Context) {
+	storeID := c.Param("storeId")
+	customerID := c.Param("customerId")
+
+	var req CreateOrderRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"code":    "INVALID_REQUEST",
+			"message": "Invalid request body",
+			"details": err.Error(),
+		})
 		return
 	}
-	c.JSON(http.StatusCreated, user)
-}
 
-func UpdateUser(c *gin.Context) {
-	id := c.Param("id")
-	var user User
-	if err := c.ShouldBindJSON(&user); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
-	}
-	user.ID = id
-	c.JSON(http.StatusOK, user)
-}
-
-func DeleteUser(c *gin.Context) {
-	c.Status(http.StatusNoContent)
-}
-
-func GetUserPost(c *gin.Context) {
-	userId := c.Param("userId")
-	postId := c.Param("postId")
-
-	post := Post{
-		ID:      postId,
-		Title:   "Post " + postId + " from User " + userId,
-		Content: "Content here...",
-	}
-	c.JSON(http.StatusOK, post)
-}
-
-func SearchUsers(c *gin.Context) {
-	query := c.Query("query")
-	sort := c.DefaultQuery("sort", "asc")
-	userType := c.Query("type")
-
-	users := []User{
-		{ID: "1", Name: "Found User 1", Type: userType},
-		{ID: "2", Name: "Found User 2", Type: userType},
+	// Simular criação do pedido
+	order := OrderResponse{
+		ID:           uuid.New().String(),
+		StoreID:      storeID,    // Usando o parâmetro da rota
+		CustomerID:   customerID, // Usando o parâmetro da rota
+		Items:        req.Items,
+		ShippingInfo: req.ShippingInfo,
+		PaymentInfo:  req.PaymentInfo,
+		Notes:        req.Notes,
+		Status:       req.Status,
+		CreatedAt:    time.Now(),
+		UpdatedAt:    time.Now(),
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"query": query,
-		"sort":  sort,
-		"type":  userType,
-		"users": users,
-	})
+	c.JSON(http.StatusCreated, order)
 }
