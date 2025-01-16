@@ -22,11 +22,13 @@ func TestGinAnalyzer(t *testing.T) {
 	}
 
 	routes := analyzer.GetRoutes()
+
+	// Verify number of routes
 	if len(routes) != 3 {
 		t.Errorf("Expected 3 routes, got %d", len(routes))
 	}
 
-	// Verify path parameters are extracted correctly
+	// Verify path parameters
 	for _, route := range routes {
 		if route.Path == "/users/:id" {
 			if len(route.Parameters) != 1 {
@@ -36,5 +38,17 @@ func TestGinAnalyzer(t *testing.T) {
 				t.Errorf("Expected parameter name 'id', got '%s'", route.Parameters[0].Name)
 			}
 		}
+	}
+}
+
+func TestAnalyzeFile(t *testing.T) {
+	analyzer := NewAnalyzer()
+	routes, err := analyzer.AnalyzeFile("testdata/example.go")
+	if err != nil {
+		t.Fatalf("Failed to analyze file: %v", err)
+	}
+
+	if len(routes) == 0 {
+		t.Error("Expected routes to be analyzed, got none")
 	}
 }
