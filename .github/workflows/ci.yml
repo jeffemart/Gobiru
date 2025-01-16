@@ -2,55 +2,22 @@ name: CI/CD
 
 on:
   push:
-    branches: [ main, develop ]
+    branches: [ "main" ]
+    tags: [ 'v*.*.*' ]
   pull_request:
-    branches: [ main, develop ]
+    branches: [ "main" ]
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
 
 jobs:
-  test:
-    runs-on: ubuntu-latest
-    steps:
-    - uses: actions/checkout@v3
-
-    - name: Set up Go
-      uses: actions/setup-go@v4
-      with:
-        go-version: '1.21'
-
-    - name: Install dependencies
-      run: |
-        go mod download
-        go install github.com/golang/mock/mockgen@v1.6.0
-
-    - name: Run tests
-      run: |
-        mkdir -p docs
-        go test -v -race -coverprofile=coverage.txt -covermode=atomic ./...
-
-    - name: Upload coverage
-      uses: codecov/codecov-action@v3
-      with:
-        file: ./coverage.txt
-        flags: unittests
-
-  lint:
-    runs-on: ubuntu-latest
-    steps:
-    - uses: actions/checkout@v3
-
-    - name: Set up Go
-      uses: actions/setup-go@v4
-      with:
-        go-version: '1.21'
-
-    - name: golangci-lint
-      uses: golangci/golangci-lint-action@v3
-      with:
-        version: latest
-
   build:
-    needs: [test, lint]
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
     steps:
     - uses: actions/checkout@v3
 
@@ -60,4 +27,35 @@ jobs:
         go-version: '1.21'
 
     - name: Build
-      run: go build -v ./... 
+      run: go build -v ./...
+
+    - name: Test
+      run: go test -v ./...
+
+    - name: Log in to the Container registry
+      uses: docker/login-action@v3
+      with:
+        registry: ${{ env.REGISTRY }}
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Extract metadata (tags, labels) for Docker
+      id: meta
+      uses: docker/metadata-action@v5
+      with:
+        images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+        tags: |
+          type=semver,pattern={{version}}
+          type=semver,pattern={{major}}.{{minor}}
+          type=sha,prefix=,suffix=,format=short
+          type=ref,event=branch
+          type=ref,event=pr
+          type=raw,value=latest,enable={{is_default_branch}}
+
+    - name: Build and push Docker image
+      uses: docker/build-push-action@v5
+      with:
+        context: .
+        push: ${{ github.event_name != 'pull_request' }}
+        tags: ${{ steps.meta.outputs.tags }}
+        labels: ${{ steps.meta.outputs.labels }} 
