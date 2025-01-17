@@ -3,6 +3,7 @@ package main
 import (
 	"flag"
 	"log"
+	"strings"
 
 	"github.com/jeffemart/gobiru/internal/analyzer"
 	"github.com/jeffemart/gobiru/internal/generator"
@@ -10,35 +11,39 @@ import (
 
 func main() {
 	var (
-		framework    = flag.String("framework", "", "Framework to analyze (gin, mux, or fiber)")
-		mainFile     = flag.String("main", "", "Path to main.go file")
-		routerFile   = flag.String("router", "", "Path to routes.go file")
-		handlersFile = flag.String("handlers", "", "Path to handlers.go file")
-		outputFile   = flag.String("output", "", "Path to output JSON file")
-		openAPIFile  = flag.String("openapi", "", "Path to output OpenAPI file")
-		title        = flag.String("title", "", "Title for OpenAPI documentation")
-		description  = flag.String("description", "", "Description for OpenAPI documentation")
-		version      = flag.String("version", "", "Version for OpenAPI documentation")
+		framework   string
+		mainFile    string
+		output      string
+		openapi     string
+		title       string
+		description string
+		version     string
 	)
+
+	flag.StringVar(&framework, "framework", "", "Framework usado (gin, fiber, mux)")
+	flag.StringVar(&mainFile, "main", "", "Arquivo principal da aplicação")
+	flag.StringVar(&output, "output", "", "Path to output JSON file")
+	flag.StringVar(&openapi, "openapi", "", "Path to output OpenAPI file")
+	flag.StringVar(&title, "title", "", "Title for OpenAPI documentation")
+	flag.StringVar(&description, "description", "", "Description for OpenAPI documentation")
+	flag.StringVar(&version, "version", "", "Version for OpenAPI documentation")
 
 	flag.Parse()
 
 	// Validar parâmetros obrigatórios
-	if *framework == "" {
+	if framework == "" {
 		log.Fatal("Framework is required (-framework)")
 	}
-	if *mainFile == "" {
+	if mainFile == "" {
 		log.Fatal("Path to main.go is required (-main)")
 	}
-	if *routerFile == "" {
-		log.Fatal("Path to routes.go is required (-router)")
-	}
-	if *handlersFile == "" {
-		log.Fatal("Path to handlers.go is required (-handlers)")
+
+	config := analyzer.Config{
+		MainFile: mainFile,
 	}
 
 	// Criar analisador baseado no framework
-	analyzer, err := analyzer.New(*framework, *mainFile, *routerFile, *handlersFile)
+	analyzer, err := analyzer.New(framework, config)
 	if err != nil {
 		log.Fatalf("Failed to create analyzer: %v", err)
 	}
@@ -50,14 +55,14 @@ func main() {
 
 	// Configurações para geração da documentação
 	jsonConfig := generator.Config{
-		OutputFile: *outputFile,
+		OutputFile: output,
 	}
 
 	openapiConfig := generator.Config{
-		OutputFile:  *openAPIFile,
-		Title:       *title,
-		Description: *description,
-		Version:     *version,
+		OutputFile:  openapi,
+		Title:       title,
+		Description: description,
+		Version:     version,
 	}
 
 	// Gerar documentação
@@ -72,6 +77,18 @@ func main() {
 	}
 
 	log.Printf("Documentation generated successfully!")
-	log.Printf("JSON documentation: %s", *outputFile)
-	log.Printf("OpenAPI documentation: %s", *openAPIFile)
+	log.Printf("JSON documentation: %s", output)
+	log.Printf("OpenAPI documentation: %s", openapi)
+}
+
+// stringSliceFlag implementa a interface flag.Value para aceitar múltiplos valores
+type stringSliceFlag []string
+
+func (s *stringSliceFlag) String() string {
+	return strings.Join(*s, ",")
+}
+
+func (s *stringSliceFlag) Set(value string) error {
+	*s = append(*s, value)
+	return nil
 }
