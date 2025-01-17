@@ -10,7 +10,10 @@ import (
 func main() {
 	app := fiber.New()
 
-	routes.SetupRoutes(app)
+	// Setup all routes
+	routes.SetupAuthRoutes(app)
+	routes.SetupProductRoutes(app)
+	routes.SetupOrderRoutes(app)
 
-	log.Fatal(app.Listen(":3000"))
+	log.Fatal(app.Listen(":8080"))
 }

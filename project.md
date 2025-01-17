@@ -5,27 +5,18 @@ gobiru/
 ├── internal/
 │   ├── analyzer/
 │   │   ├── analyzer.go
+│   │   ├── common.go
+│   │   ├── fiber.go
 │   │   ├── gin.go
-│   │   ├── mux.go
-│   │   └── fiber.go
-│   ├── generator/
-│   │   ├── json.go
-│   │   └── openapi.go
-│   └── models/
-│       └── route.go
+│   │   └── mux.go
+│   └── generator/
+│       ├── json.go
+│       └── openapi.go
 ├── examples/
+│   ├── fiber/
 │   ├── gin/
-│   │   ├── simple/
-│   │   └── separated/
-│   ├── mux/
-│   │   ├── simple/
-│   │   └── separated/
-│   └── fiber/
-│       ├── simple/
-│       └── separated/
-├── .gitignore
+│   └── gorilla/
 ├── go.mod
 ├── go.sum
 ├── LICENSE
-├── Makefile
 └── README.md
