@@ -244,3 +244,11 @@ func extractFiberParameters(path string) []*spec.Parameter {
 	}
 	return params
 }
+
+// routeInfo representa uma rota da API
+type routeInfo struct {
+	path        string
+	method      string
+	handlerName string
+	basePath    string // Usado pelo Mux para subrouters
+}

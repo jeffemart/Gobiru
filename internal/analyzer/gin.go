@@ -25,89 +25,53 @@ func NewGinAnalyzer(config Config) *GinAnalyzer {
 func (a *GinAnalyzer) Analyze() (*spec.Documentation, error) {
 	fset := token.NewFileSet()
 
-	routerFile, err := parser.ParseFile(fset, a.config.RouterFile, nil, parser.ParseComments)
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse router file: %v", err)
+	// Processar todos os arquivos de rotas
+	var routes []routeInfo
+	for _, routerFile := range a.config.RouterFiles {
+		file, err := parser.ParseFile(fset, routerFile, nil, parser.ParseComments)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse router file %s: %v", routerFile, err)
+		}
+
+		// Processar rotas deste arquivo
+		fileRoutes, err := a.processRouterFile(file)
+		if err != nil {
+			return nil, err
+		}
+		routes = append(routes, fileRoutes...)
 	}
 
-	handlersFile, err := parser.ParseFile(fset, a.config.HandlersFile, nil, parser.ParseComments)
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse handlers file: %v", err)
-	}
+	// Criar mapa de handlers de todos os arquivos
+	handlersMap := make(map[string]*ast.FuncDecl)
+	for _, handlerFile := range a.config.HandlerFiles {
+		file, err := parser.ParseFile(fset, handlerFile, nil, parser.ParseComments)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse handler file %s: %v", handlerFile, err)
+		}
 
-	var routes []struct {
-		Path        string
-		Method      string
-		HandlerName string
-	}
-
-	// Função para construir o caminho completo da rota
-	var currentPath []string
-
-	ast.Inspect(routerFile, func(n ast.Node) bool {
-		switch node := n.(type) {
-		case *ast.CallExpr:
-			if sel, ok := node.Fun.(*ast.SelectorExpr); ok {
-				switch sel.Sel.Name {
-				case "Group":
-					if len(node.Args) > 0 {
-						if lit, ok := node.Args[0].(*ast.BasicLit); ok {
-							prefix := strings.Trim(lit.Value, "\"")
-							currentPath = append(currentPath, prefix)
-						}
-					}
-				case "POST", "GET", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS":
-					if len(node.Args) >= 2 {
-						route := struct {
-							Path        string
-							Method      string
-							HandlerName string
-						}{
-							Method: strings.ToUpper(sel.Sel.Name),
-						}
-
-						// Construir caminho completo
-						if lit, ok := node.Args[0].(*ast.BasicLit); ok {
-							subPath := strings.Trim(lit.Value, "\"")
-							fullPath := strings.Join(currentPath, "") + subPath
-							route.Path = strings.TrimRight(fullPath, "/")
-						}
-
-						// Extrair handler
-						if len(node.Args) > 1 {
-							if ident, ok := node.Args[1].(*ast.Ident); ok {
-								route.HandlerName = ident.Name
-							} else if sel, ok := node.Args[1].(*ast.SelectorExpr); ok {
-								route.HandlerName = sel.Sel.Name
-							}
-						}
-
-						if route.Path != "" && route.HandlerName != "" {
-							routes = append(routes, route)
-						}
-					}
-				}
+		for _, decl := range file.Decls {
+			if fn, ok := decl.(*ast.FuncDecl); ok {
+				handlersMap[fn.Name.Name] = fn
 			}
 		}
-		return true
-	})
+	}
 
+	// Criar a documentação
 	doc := &spec.Documentation{
 		Operations: make([]*spec.Operation, 0),
 	}
 
 	for _, route := range routes {
 		operation := &spec.Operation{
-			Path:       route.Path,
-			Method:     route.Method,
-			Parameters: extractGinParameters(route.Path),
-			Responses:  make(map[string]*spec.Response),
+			Path:       route.path,
+			Method:     route.method,
+			Parameters: extractGinParameters(route.path),
 		}
 
-		if handlerFunc := findFunction(handlersFile, route.HandlerName); handlerFunc != nil {
+		if handlerFunc := handlersMap[route.handlerName]; handlerFunc != nil {
 			operation.Summary = extractSummaryFromComments(handlerFunc)
-			operation.RequestBody = extractRequestBody(handlerFunc, a.config.HandlersFile)
-			operation.Responses = extractResponses(handlerFunc, a.config.HandlersFile)
+			operation.RequestBody = extractRequestBody(handlerFunc, "")
+			operation.Responses = extractResponses(handlerFunc, "")
 		}
 
 		doc.Operations = append(doc.Operations, operation)
@@ -147,4 +111,53 @@ func extractGinParameters(path string) []*spec.Parameter {
 	}
 
 	return params
+}
+
+func (a *GinAnalyzer) processRouterFile(file *ast.File) ([]routeInfo, error) {
+	var routes []routeInfo
+	var currentPath []string
+
+	ast.Inspect(file, func(n ast.Node) bool {
+		switch node := n.(type) {
+		case *ast.CallExpr:
+			if sel, ok := node.Fun.(*ast.SelectorExpr); ok {
+				switch sel.Sel.Name {
+				case "Group":
+					if len(node.Args) > 0 {
+						if lit, ok := node.Args[0].(*ast.BasicLit); ok {
+							prefix := strings.Trim(lit.Value, "\"")
+							currentPath = append(currentPath, prefix)
+						}
+					}
+				case "POST", "GET", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS":
+					if len(node.Args) >= 2 {
+						route := routeInfo{
+							method: strings.ToUpper(sel.Sel.Name),
+						}
+
+						// Construir caminho completo
+						if lit, ok := node.Args[0].(*ast.BasicLit); ok {
+							subPath := strings.Trim(lit.Value, "\"")
+							fullPath := strings.Join(currentPath, "") + subPath
+							route.path = strings.TrimRight(fullPath, "/")
+						}
+
+						// Extrair handler
+						if ident, ok := node.Args[1].(*ast.Ident); ok {
+							route.handlerName = ident.Name
+						} else if sel, ok := node.Args[1].(*ast.SelectorExpr); ok {
+							route.handlerName = sel.Sel.Name
+						}
+
+						if route.path != "" && route.handlerName != "" {
+							routes = append(routes, route)
+						}
+					}
+				}
+			}
+		}
+		return true
+	})
+
+	return routes, nil
 }

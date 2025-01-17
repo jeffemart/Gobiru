@@ -6,7 +6,12 @@ import (
 )
 
 func main() {
-	gin.SetMode(gin.ReleaseMode)
-	r := routes.SetupRoutes()
-	r.Run(":3000")
+	r := gin.Default()
+
+	// Setup all routes
+	routes.SetupUserRoutes(r)
+	routes.SetupProductRoutes(r)
+	routes.SetupOrderRoutes(r)
+
+	r.Run(":8080")
 }

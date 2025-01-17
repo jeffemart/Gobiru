@@ -22,49 +22,50 @@ func NewMuxAnalyzer(config Config) *MuxAnalyzer {
 	}
 }
 
-type routeInfo struct {
-	basePath    string
-	path        string
-	method      string
-	handlerName string
-}
-
 type routeContext struct {
 	paths  []string
 	routes []routeInfo
 }
 
 func (a *MuxAnalyzer) Analyze() (*spec.Documentation, error) {
-	fset := token.NewFileSet()
-	routerFile, err := parser.ParseFile(fset, a.config.RouterFile, nil, parser.ParseComments)
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse router file: %v", err)
-	}
-
-	handlersFile, err := parser.ParseFile(fset, a.config.HandlersFile, nil, parser.ParseComments)
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse handlers file: %v", err)
-	}
-
 	ctx := &routeContext{
 		paths:  make([]string, 0),
 		routes: make([]routeInfo, 0),
 	}
 
-	// Encontrar a função SetupRoutes
-	var setupFound bool
-	for _, decl := range routerFile.Decls {
-		if fn, ok := decl.(*ast.FuncDecl); ok {
-			if fn.Name.Name == "SetupRoutes" {
-				setupFound = true
-				a.processRouterFunction(fn, ctx)
-				break
+	// Processar todos os arquivos de rotas
+	for _, routerFile := range a.config.RouterFiles {
+		fset := token.NewFileSet()
+		file, err := parser.ParseFile(fset, routerFile, nil, parser.ParseComments)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse router file %s: %v", routerFile, err)
+		}
+
+		// Procurar por funções que configuram rotas
+		for _, decl := range file.Decls {
+			if fn, ok := decl.(*ast.FuncDecl); ok {
+				// Procurar por funções que começam com "Setup"
+				if strings.HasPrefix(fn.Name.Name, "Setup") {
+					a.processRouterFunction(fn, ctx)
+				}
 			}
 		}
 	}
 
-	if !setupFound {
-		return nil, fmt.Errorf("SetupRoutes function not found in router file")
+	// Criar mapa de handlers de todos os arquivos
+	handlersMap := make(map[string]*ast.FuncDecl)
+	for _, handlerFile := range a.config.HandlerFiles {
+		fset := token.NewFileSet()
+		file, err := parser.ParseFile(fset, handlerFile, nil, parser.ParseComments)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse handler file %s: %v", handlerFile, err)
+		}
+
+		for _, decl := range file.Decls {
+			if fn, ok := decl.(*ast.FuncDecl); ok {
+				handlersMap[fn.Name.Name] = fn
+			}
+		}
 	}
 
 	// Criar a documentação
@@ -79,18 +80,13 @@ func (a *MuxAnalyzer) Analyze() (*spec.Documentation, error) {
 			Parameters: extractMuxParameters(route.path),
 		}
 
-		if handlerFunc := findFunction(handlersFile, route.handlerName); handlerFunc != nil {
+		if handlerFunc := handlersMap[route.handlerName]; handlerFunc != nil {
 			operation.Summary = extractSummaryFromComments(handlerFunc)
-			operation.RequestBody = extractRequestBody(handlerFunc, a.config.HandlersFile)
-			operation.Responses = extractResponses(handlerFunc, a.config.HandlersFile)
+			operation.RequestBody = extractRequestBody(handlerFunc, "")
+			operation.Responses = extractResponses(handlerFunc, "")
 		}
 
 		doc.Operations = append(doc.Operations, operation)
-		fmt.Printf("Added operation: %s %s -> %s\n", operation.Method, operation.Path, route.handlerName)
-	}
-
-	if len(doc.Operations) == 0 {
-		return nil, fmt.Errorf("no operations found in router file")
 	}
 
 	return doc, nil
@@ -186,7 +182,7 @@ func (a *MuxAnalyzer) processRouterFunction(fn *ast.FuncDecl, ctx *routeContext)
 							return true
 						})
 
-						if route.handlerName != "" { // Removida a verificação de path vazio
+						if route.handlerName != "" {
 							if route.method == "" {
 								route.method = "GET"
 							}
