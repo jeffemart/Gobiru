@@ -22,9 +22,20 @@ func NewMuxAnalyzer(config Config) *MuxAnalyzer {
 	}
 }
 
+type routeInfo struct {
+	basePath    string
+	path        string
+	method      string
+	handlerName string
+}
+
+type routeContext struct {
+	paths  []string
+	routes []routeInfo
+}
+
 func (a *MuxAnalyzer) Analyze() (*spec.Documentation, error) {
 	fset := token.NewFileSet()
-
 	routerFile, err := parser.ParseFile(fset, a.config.RouterFile, nil, parser.ParseComments)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse router file: %v", err)
@@ -35,57 +46,139 @@ func (a *MuxAnalyzer) Analyze() (*spec.Documentation, error) {
 		return nil, fmt.Errorf("failed to parse handlers file: %v", err)
 	}
 
-	var routes []struct {
-		Path        string
-		Method      string
-		HandlerName string
+	ctx := &routeContext{
+		paths:  make([]string, 0),
+		routes: make([]routeInfo, 0),
 	}
 
-	// Função para construir o caminho completo da rota
-	var currentPath []string
+	// Encontrar a função SetupRoutes
+	var setupFound bool
+	for _, decl := range routerFile.Decls {
+		if fn, ok := decl.(*ast.FuncDecl); ok {
+			if fn.Name.Name == "SetupRoutes" {
+				setupFound = true
+				a.processRouterFunction(fn, ctx)
+				break
+			}
+		}
+	}
 
-	ast.Inspect(routerFile, func(n ast.Node) bool {
-		switch node := n.(type) {
-		case *ast.CallExpr:
-			// Capturar PathPrefix e HandleFunc
-			if sel, ok := node.Fun.(*ast.SelectorExpr); ok {
-				switch sel.Sel.Name {
-				case "PathPrefix":
-					if len(node.Args) > 0 {
-						if lit, ok := node.Args[0].(*ast.BasicLit); ok {
-							prefix := strings.Trim(lit.Value, "\"")
-							currentPath = append(currentPath, prefix)
+	if !setupFound {
+		return nil, fmt.Errorf("SetupRoutes function not found in router file")
+	}
+
+	// Criar a documentação
+	doc := &spec.Documentation{
+		Operations: make([]*spec.Operation, 0),
+	}
+
+	for _, route := range ctx.routes {
+		operation := &spec.Operation{
+			Path:       route.path,
+			Method:     route.method,
+			Parameters: extractMuxParameters(route.path),
+		}
+
+		if handlerFunc := findFunction(handlersFile, route.handlerName); handlerFunc != nil {
+			operation.Summary = extractSummaryFromComments(handlerFunc)
+			operation.RequestBody = extractRequestBody(handlerFunc, a.config.HandlersFile)
+			operation.Responses = extractResponses(handlerFunc, a.config.HandlersFile)
+		}
+
+		doc.Operations = append(doc.Operations, operation)
+		fmt.Printf("Added operation: %s %s -> %s\n", operation.Method, operation.Path, route.handlerName)
+	}
+
+	if len(doc.Operations) == 0 {
+		return nil, fmt.Errorf("no operations found in router file")
+	}
+
+	return doc, nil
+}
+
+func (a *MuxAnalyzer) processRouterFunction(fn *ast.FuncDecl, ctx *routeContext) {
+	var currentPath []string
+	var subrouterVars = make(map[string]string) // Mapear variáveis para seus caminhos
+
+	// Primeira passagem: mapear todos os subrouters
+	ast.Inspect(fn.Body, func(n ast.Node) bool {
+		if expr, ok := n.(*ast.AssignStmt); ok {
+			for i, rhs := range expr.Rhs {
+				if call, ok := rhs.(*ast.CallExpr); ok {
+					if sel, ok := call.Fun.(*ast.SelectorExpr); ok {
+						if sel.Sel.Name == "Subrouter" {
+							if pathCall, ok := sel.X.(*ast.CallExpr); ok {
+								if pathSel, ok := pathCall.Fun.(*ast.SelectorExpr); ok {
+									if pathSel.Sel.Name == "PathPrefix" && len(pathCall.Args) > 0 {
+										if lit, ok := pathCall.Args[0].(*ast.BasicLit); ok {
+											path := strings.Trim(lit.Value, "\"")
+											currentPath = append(currentPath, path)
+
+											if i < len(expr.Lhs) {
+												if ident, ok := expr.Lhs[i].(*ast.Ident); ok {
+													subrouterVars[ident.Name] = strings.Join(currentPath, "")
+													fmt.Printf("Mapped subrouter %s to path: %s\n",
+														ident.Name, subrouterVars[ident.Name])
+												}
+											}
+
+											fmt.Printf("Added path prefix: %s (current path: %s)\n",
+												path, strings.Join(currentPath, ""))
+										}
+									}
+								}
+							}
 						}
 					}
-				case "HandleFunc":
-					if len(node.Args) >= 2 {
-						route := struct {
-							Path        string
-							Method      string
-							HandlerName string
-						}{}
+				}
+			}
+		}
+		return true
+	})
 
-						// Construir caminho completo
-						if lit, ok := node.Args[0].(*ast.BasicLit); ok {
-							subPath := strings.Trim(lit.Value, "\"")
-							fullPath := strings.Join(currentPath, "") + subPath
-							route.Path = strings.TrimRight(fullPath, "/")
+	// Segunda passagem: encontrar todas as rotas
+	ast.Inspect(fn.Body, func(n ast.Node) bool {
+		if expr, ok := n.(*ast.CallExpr); ok {
+			if sel, ok := expr.Fun.(*ast.SelectorExpr); ok {
+				if sel.Sel.Name == "HandleFunc" {
+					if x, ok := sel.X.(*ast.Ident); ok {
+						basePath := subrouterVars[x.Name]
+						fmt.Printf("Processing HandleFunc for subrouter %s with basePath: %s\n", x.Name, basePath)
+
+						route := routeInfo{
+							basePath: basePath,
+							path:     "/", // Valor padrão para path vazio
+						}
+
+						// Extrair path
+						if len(expr.Args) >= 1 {
+							if lit, ok := expr.Args[0].(*ast.BasicLit); ok {
+								pathValue := strings.Trim(lit.Value, "\"")
+								if pathValue != "" {
+									route.path = pathValue
+								}
+								fmt.Printf("Found path: %s\n", route.path)
+							}
 						}
 
 						// Extrair handler
-						if ident, ok := node.Args[1].(*ast.Ident); ok {
-							route.HandlerName = ident.Name
-						} else if sel, ok := node.Args[1].(*ast.SelectorExpr); ok {
-							route.HandlerName = sel.Sel.Name
+						if len(expr.Args) >= 2 {
+							if ident, ok := expr.Args[1].(*ast.Ident); ok {
+								route.handlerName = ident.Name
+							} else if sel, ok := expr.Args[1].(*ast.SelectorExpr); ok {
+								route.handlerName = sel.Sel.Name
+							}
+							fmt.Printf("Found handler: %s\n", route.handlerName)
 						}
 
-						// Procurar pelo método HTTP
-						ast.Inspect(n, func(m ast.Node) bool {
+						// Procurar método HTTP
+						ast.Inspect(expr, func(m ast.Node) bool {
 							if call, ok := m.(*ast.CallExpr); ok {
 								if methodSel, ok := call.Fun.(*ast.SelectorExpr); ok {
 									if methodSel.Sel.Name == "Methods" && len(call.Args) > 0 {
 										if lit, ok := call.Args[0].(*ast.BasicLit); ok {
-											route.Method = strings.Trim(lit.Value, "\"")
+											route.method = strings.Trim(lit.Value, "\"")
+											fmt.Printf("Found HTTP method: %s\n", route.method)
 										}
 									}
 								}
@@ -93,44 +186,68 @@ func (a *MuxAnalyzer) Analyze() (*spec.Documentation, error) {
 							return true
 						})
 
-						if route.Path != "" && route.HandlerName != "" {
-							if route.Method == "" {
-								route.Method = "GET" // Método padrão
+						if route.handlerName != "" { // Removida a verificação de path vazio
+							if route.method == "" {
+								route.method = "GET"
 							}
-							routes = append(routes, route)
+							route.path = route.basePath + route.path
+							// Remover barras duplas se houverem
+							route.path = strings.ReplaceAll(route.path, "//", "/")
+							ctx.routes = append(ctx.routes, route)
+							fmt.Printf("Added route: %s %s -> %s\n",
+								route.method, route.path, route.handlerName)
+						} else {
+							fmt.Printf("Skipping incomplete route: path=%s, handler=%s, method=%s\n",
+								route.path, route.handlerName, route.method)
 						}
 					}
-				case "Subrouter":
-					// Manter o caminho atual para o subrouter
-					return true
 				}
 			}
 		}
 		return true
 	})
 
-	doc := &spec.Documentation{
-		Operations: make([]*spec.Operation, 0),
+	// Debug: imprimir todas as rotas encontradas
+	fmt.Printf("\nDebug - Todas as rotas encontradas:\n")
+	for _, route := range ctx.routes {
+		fmt.Printf("Route: %s %s -> %s (basePath: %s)\n",
+			route.method, route.path, route.handlerName, route.basePath)
 	}
 
-	for _, route := range routes {
-		operation := &spec.Operation{
-			Path:       route.Path,
-			Method:     strings.ToUpper(route.Method),
-			Parameters: extractMuxParameters(route.Path),
-			Responses:  make(map[string]*spec.Response),
-		}
-
-		if handlerFunc := findFunction(handlersFile, route.HandlerName); handlerFunc != nil {
-			operation.Summary = extractSummaryFromComments(handlerFunc)
-			operation.RequestBody = extractRequestBody(handlerFunc, a.config.HandlersFile)
-			operation.Responses = extractResponses(handlerFunc, a.config.HandlersFile)
-		}
-
-		doc.Operations = append(doc.Operations, operation)
+	if len(ctx.routes) == 0 {
+		fmt.Printf("Warning: No routes were found in the router file\n")
 	}
+}
 
-	return doc, nil
+// Função auxiliar para verificar se uma chamada Methods está relacionada a um HandleFunc
+func isRelatedMethod(methodCall, handleFunc *ast.CallExpr) bool {
+	// Verificar se o Methods está na mesma cadeia de chamadas que o HandleFunc
+	parent := methodCall
+	for {
+		if parent == nil {
+			return false
+		}
+		if parent == handleFunc {
+			return true
+		}
+		// Tentar encontrar o próximo pai na cadeia
+		parent = findParentCall(parent)
+	}
+}
+
+// Função auxiliar para encontrar a chamada pai
+func findParentCall(node ast.Node) *ast.CallExpr {
+	var parent *ast.CallExpr
+	ast.Inspect(node, func(n ast.Node) bool {
+		if call, ok := n.(*ast.CallExpr); ok {
+			if call != node {
+				parent = call
+				return false // Parar após encontrar o primeiro pai
+			}
+		}
+		return true
+	})
+	return parent
 }
 
 func extractMuxParameters(path string) []*spec.Parameter {
@@ -192,33 +309,6 @@ func extractQueryParams(node ast.Node) []*spec.Parameter {
 }
 
 // Funções auxiliares...
-func findParentCall(node ast.Node) *ast.CallExpr {
-	var parent *ast.CallExpr
-	ast.Inspect(node, func(n ast.Node) bool {
-		if call, ok := n.(*ast.CallExpr); ok {
-			parent = call
-		}
-		return true
-	})
-	return parent
-}
-
-func extractSchema(structType *ast.StructType) map[string]interface{} {
-	schema := make(map[string]interface{})
-	for _, field := range structType.Fields.List {
-		if len(field.Names) > 0 {
-			fieldName := field.Names[0].Name
-			fieldType := ""
-			if ident, ok := field.Type.(*ast.Ident); ok {
-				fieldType = ident.Name
-			}
-			schema[fieldName] = fieldType
-		}
-	}
-	return schema
-}
-
-// Adicionar estas funções auxiliares
 func findFunction(file *ast.File, name string) *ast.FuncDecl {
 	for _, decl := range file.Decls {
 		if fn, ok := decl.(*ast.FuncDecl); ok {
