@@ -2,6 +2,7 @@ package analyzer
 
 import (
 	"fmt"
+	"os"
 
 	"github.com/jeffemart/gobiru/internal/spec"
 )
@@ -25,20 +26,48 @@ type BaseAnalyzer struct {
 
 // New cria um novo analisador baseado no framework
 func New(framework string, mainFile, routerFile, handlersFile string) (Analyzer, error) {
+	// Add validation for file paths
+	if routerFile == "" || handlersFile == "" {
+		return nil, fmt.Errorf("router and handlers files are required")
+	}
+
 	config := Config{
 		MainFile:     mainFile,
 		RouterFile:   routerFile,
 		HandlersFile: handlersFile,
 	}
 
+	var analyzer Analyzer
 	switch framework {
 	case "gin":
-		return NewGinAnalyzer(config), nil
+		analyzer = NewGinAnalyzer(config)
 	case "mux":
-		return NewMuxAnalyzer(config), nil
+		analyzer = NewMuxAnalyzer(config)
 	case "fiber":
-		return NewFiberAnalyzer(config), nil
+		analyzer = NewFiberAnalyzer(config)
 	default:
 		return nil, fmt.Errorf("unsupported framework: %s", framework)
 	}
+
+	// Validate that files exist
+	if err := validateFiles(config); err != nil {
+		return nil, err
+	}
+
+	return analyzer, nil
+}
+
+// validateFiles checks if the required files exist
+func validateFiles(config Config) error {
+	files := []string{config.RouterFile, config.HandlersFile}
+	if config.MainFile != "" {
+		files = append(files, config.MainFile)
+	}
+
+	for _, file := range files {
+		if _, err := os.Stat(file); os.IsNotExist(err) {
+			return fmt.Errorf("file not found: %s", file)
+		}
+	}
+	return nil
 }
