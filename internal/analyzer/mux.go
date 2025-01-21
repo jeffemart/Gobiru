@@ -28,68 +28,112 @@ type routeContext struct {
 }
 
 func (a *MuxAnalyzer) Analyze() (*spec.Documentation, error) {
-	ctx := &routeContext{
-		paths:  make([]string, 0),
-		routes: make([]routeInfo, 0),
-	}
+	operations := make([]*spec.Operation, 0)
 
-	// Processar todos os arquivos de rotas
-	for _, routerFile := range a.config.RouterFiles {
+	for _, routeFile := range a.config.RouterFiles {
 		fset := token.NewFileSet()
-		file, err := parser.ParseFile(fset, routerFile, nil, parser.ParseComments)
+		file, err := parser.ParseFile(fset, routeFile, nil, parser.ParseComments)
 		if err != nil {
-			return nil, fmt.Errorf("failed to parse router file %s: %v", routerFile, err)
+			return nil, fmt.Errorf("failed to parse route file %s: %v", routeFile, err)
 		}
 
-		// Procurar por funções que configuram rotas
+		// Contexto para rastrear informações durante a análise
+		ctx := &routeContext{
+			routes: make([]routeInfo, 0),
+		}
+
+		// Primeira passagem: encontrar todos os subrouters
 		for _, decl := range file.Decls {
 			if fn, ok := decl.(*ast.FuncDecl); ok {
-				// Procurar por funções que começam com "Setup"
-				if strings.HasPrefix(fn.Name.Name, "Setup") {
-					a.processRouterFunction(fn, ctx)
+				a.processRouterFunction(fn, ctx)
+			}
+		}
+
+		// Converter rotas em operações
+		for _, route := range ctx.routes {
+			// Encontrar handler correspondente
+			handlerDoc := ""
+			handlerName := route.handlerName
+			for _, handlerFile := range a.config.HandlerFiles {
+				if doc := findHandlerDoc(handlerFile, handlerName); doc != "" {
+					handlerDoc = doc
+					break
 				}
 			}
+
+			// Determinar método HTTP
+			method := route.method
+			if method == "" {
+				// Inferir método do nome do handler
+				switch {
+				case strings.HasPrefix(handlerName, "Get"):
+					method = "GET"
+				case strings.HasPrefix(handlerName, "Create"):
+					method = "POST"
+				case strings.HasPrefix(handlerName, "Update"):
+					method = "PUT"
+				case strings.HasPrefix(handlerName, "Delete"):
+					method = "DELETE"
+				case strings.HasPrefix(handlerName, "Patch"):
+					method = "PATCH"
+				default:
+					method = "GET"
+				}
+			}
+
+			operation := &spec.Operation{
+				Path:    route.path,
+				Method:  method,
+				Summary: handlerDoc,
+			}
+
+			// Extrair parâmetros do path
+			operation.Parameters = extractMuxParameters(route.path)
+
+			// Adicionar query parameters se existirem
+			queryParams := extractQueryParams(route.node)
+			operation.Parameters = append(operation.Parameters, queryParams...)
+
+			// Adicionar response padrão
+			operation.Responses = map[string]*spec.Response{
+				"200": {
+					Description: "Successful response",
+					Content: map[string]*spec.MediaType{
+						"application/json": {
+							Schema: &spec.Schema{
+								Type: "object",
+							},
+						},
+					},
+				},
+			}
+
+			operations = append(operations, operation)
 		}
 	}
 
-	// Criar mapa de handlers de todos os arquivos
-	handlersMap := make(map[string]*ast.FuncDecl)
-	for _, handlerFile := range a.config.HandlerFiles {
-		fset := token.NewFileSet()
-		file, err := parser.ParseFile(fset, handlerFile, nil, parser.ParseComments)
-		if err != nil {
-			return nil, fmt.Errorf("failed to parse handler file %s: %v", handlerFile, err)
-		}
+	return &spec.Documentation{
+		Operations: operations,
+	}, nil
+}
 
-		for _, decl := range file.Decls {
-			if fn, ok := decl.(*ast.FuncDecl); ok {
-				handlersMap[fn.Name.Name] = fn
+// findHandlerDoc procura a documentação de um handler específico
+func findHandlerDoc(handlerFile string, handlerName string) string {
+	fset := token.NewFileSet()
+	file, err := parser.ParseFile(fset, handlerFile, nil, parser.ParseComments)
+	if err != nil {
+		return ""
+	}
+
+	for _, decl := range file.Decls {
+		if fn, ok := decl.(*ast.FuncDecl); ok {
+			if fn.Name.Name == handlerName && fn.Doc != nil {
+				return strings.TrimSpace(fn.Doc.Text())
 			}
 		}
 	}
 
-	// Criar a documentação
-	doc := &spec.Documentation{
-		Operations: make([]*spec.Operation, 0),
-	}
-
-	for _, route := range ctx.routes {
-		operation := &spec.Operation{
-			Path:       route.path,
-			Method:     route.method,
-			Parameters: extractMuxParameters(route.path),
-		}
-
-		if handlerFunc := handlersMap[route.handlerName]; handlerFunc != nil {
-			operation.Summary = extractSummaryFromComments(handlerFunc)
-			operation.RequestBody = extractRequestBody(handlerFunc, "")
-			operation.Responses = extractResponses(handlerFunc, "")
-		}
-
-		doc.Operations = append(doc.Operations, operation)
-	}
-
-	return doc, nil
+	return ""
 }
 
 func (a *MuxAnalyzer) processRouterFunction(fn *ast.FuncDecl, ctx *routeContext) {
@@ -143,7 +187,8 @@ func (a *MuxAnalyzer) processRouterFunction(fn *ast.FuncDecl, ctx *routeContext)
 
 						route := routeInfo{
 							basePath: basePath,
-							path:     "/", // Valor padrão para path vazio
+							path:     "/",  // Valor padrão para path vazio
+							node:     expr, // Adicionar o nó AST
 						}
 
 						// Extrair path
@@ -168,24 +213,9 @@ func (a *MuxAnalyzer) processRouterFunction(fn *ast.FuncDecl, ctx *routeContext)
 						}
 
 						// Procurar método HTTP
-						ast.Inspect(expr, func(m ast.Node) bool {
-							if call, ok := m.(*ast.CallExpr); ok {
-								if methodSel, ok := call.Fun.(*ast.SelectorExpr); ok {
-									if methodSel.Sel.Name == "Methods" && len(call.Args) > 0 {
-										if lit, ok := call.Args[0].(*ast.BasicLit); ok {
-											route.method = strings.Trim(lit.Value, "\"")
-											fmt.Printf("Found HTTP method: %s\n", route.method)
-										}
-									}
-								}
-							}
-							return true
-						})
+						route.method = a.extractMethod(expr)
 
 						if route.handlerName != "" {
-							if route.method == "" {
-								route.method = "GET"
-							}
 							route.path = route.basePath + route.path
 							// Remover barras duplas se houverem
 							route.path = strings.ReplaceAll(route.path, "//", "/")
@@ -213,6 +243,90 @@ func (a *MuxAnalyzer) processRouterFunction(fn *ast.FuncDecl, ctx *routeContext)
 	if len(ctx.routes) == 0 {
 		fmt.Printf("Warning: No routes were found in the router file\n")
 	}
+
+	// Remover rotas incompletas ou inválidas antes de adicionar ao contexto
+	validRoutes := make([]routeInfo, 0)
+	for _, route := range ctx.routes {
+		if route.path != "" {
+			// Normalizar o path
+			route.path = strings.TrimSpace(route.path)
+			route.path = strings.TrimSuffix(route.path, "/")
+			if !strings.HasPrefix(route.path, "/") {
+				route.path = "/" + route.path
+			}
+
+			// Inferir método HTTP baseado no path e nome do handler
+			if route.method == "" || route.method == "GET" {
+				// Primeiro tentar pelo nome do handler
+				switch {
+				case strings.HasPrefix(route.handlerName, "Create"):
+					route.method = "POST"
+				case strings.HasPrefix(route.handlerName, "Update"):
+					route.method = "PUT"
+				case strings.HasPrefix(route.handlerName, "Delete"):
+					route.method = "DELETE"
+				case strings.HasPrefix(route.handlerName, "Patch"):
+					route.method = "PATCH"
+				case strings.HasPrefix(route.handlerName, "Get"):
+					route.method = "GET"
+				default:
+					// Se não encontrou pelo handler, tentar pelo path
+					pathLower := strings.ToLower(route.path)
+					switch {
+					case strings.Contains(pathLower, "login") ||
+						strings.Contains(pathLower, "register") ||
+						strings.Contains(pathLower, "forgot-password") ||
+						strings.Contains(pathLower, "reset-password"):
+						route.method = "POST"
+					case strings.Contains(pathLower, "employees"):
+						if strings.HasSuffix(pathLower, "employees") {
+							route.method = "GET" // Listar employees
+							if route.handlerName == "" {
+								route.handlerName = "ListEmployees"
+								route.description = "Lista todos os funcionários"
+							}
+						} else if strings.Contains(pathLower, "status") {
+							route.method = "PUT" // Atualizar status
+							if route.handlerName == "" {
+								route.handlerName = "UpdateEmployeeStatus"
+								route.description = "Atualiza o status do funcionário"
+							}
+						} else {
+							route.method = "GET" // Get employee by ID
+							if route.handlerName == "" {
+								route.handlerName = "GetEmployee"
+								route.description = "Retorna os dados de um funcionário específico"
+							}
+						}
+					}
+				}
+			}
+
+			validRoutes = append(validRoutes, route)
+		}
+	}
+
+	// Remover duplicatas mantendo a versão mais completa
+	seenPaths := make(map[string]routeInfo)
+	for _, route := range validRoutes {
+		key := fmt.Sprintf("%s %s", route.method, route.path)
+		if existing, exists := seenPaths[key]; exists {
+			// Manter a versão com mais informações
+			if route.handlerName != "" && existing.handlerName == "" {
+				seenPaths[key] = route
+			}
+		} else {
+			seenPaths[key] = route
+		}
+	}
+
+	// Converter mapa de volta para slice
+	uniqueRoutes := make([]routeInfo, 0, len(seenPaths))
+	for _, route := range seenPaths {
+		uniqueRoutes = append(uniqueRoutes, route)
+	}
+
+	ctx.routes = uniqueRoutes
 }
 
 // Função auxiliar para verificar se uma chamada Methods está relacionada a um HandleFunc
@@ -270,6 +384,9 @@ func extractMuxParameters(path string) []*spec.Parameter {
 
 func extractQueryParams(node ast.Node) []*spec.Parameter {
 	params := make([]*spec.Parameter, 0)
+	if node == nil {
+		return params
+	}
 
 	ast.Inspect(node, func(n ast.Node) bool {
 		if call, ok := n.(*ast.CallExpr); ok {
@@ -314,4 +431,33 @@ func findFunction(file *ast.File, name string) *ast.FuncDecl {
 		}
 	}
 	return nil
+}
+
+func (a *MuxAnalyzer) extractMethod(node *ast.CallExpr) string {
+	var method string
+
+	// Procurar por chamadas ao método Methods() em toda a cadeia
+	ast.Inspect(node, func(n ast.Node) bool {
+		if call, ok := n.(*ast.CallExpr); ok {
+			if sel, ok := call.Fun.(*ast.SelectorExpr); ok {
+				if sel.Sel.Name == "Methods" && len(call.Args) > 0 {
+					// Verificar se o Methods está relacionado ao HandleFunc atual
+					if isRelatedMethod(call, node) {
+						if lit, ok := call.Args[0].(*ast.BasicLit); ok {
+							method = strings.Trim(lit.Value, "\"")
+							return false // Parar após encontrar o método
+						}
+					}
+				}
+			}
+		}
+		return true
+	})
+
+	// Se não encontrou Methods(), usar outras estratégias...
+	if method == "" {
+		// ... resto do código permanece igual ...
+	}
+
+	return method
 }

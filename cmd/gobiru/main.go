@@ -3,6 +3,7 @@ package main
 import (
 	"flag"
 	"log"
+	"path/filepath"
 	"strings"
 
 	"github.com/jeffemart/gobiru/internal/analyzer"
@@ -38,8 +39,14 @@ func main() {
 		log.Fatal("Path to main.go is required (-main)")
 	}
 
+	// Resolver caminho absoluto do main.go
+	absMainPath, err := filepath.Abs(mainFile)
+	if err != nil {
+		log.Fatalf("Failed to resolve main file path: %v", err)
+	}
+
 	config := analyzer.Config{
-		MainFile: mainFile,
+		MainFile: absMainPath,
 	}
 
 	// Criar analisador baseado no framework
