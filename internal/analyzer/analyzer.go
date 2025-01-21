@@ -2,6 +2,7 @@ package analyzer
 
 import (
 	"fmt"
+	"go/ast"
 	"go/parser"
 	"go/token"
 	"os"
@@ -17,21 +18,42 @@ type ImportTracker struct {
 	routeFiles     []string
 	handlerFiles   []string
 	baseDir        string
+	moduleName     string
 }
 
 func NewImportTracker(mainFile string) *ImportTracker {
-	// Encontrar o diretório base do projeto
 	baseDir := filepath.Dir(mainFile)
-	for !strings.HasSuffix(baseDir, "examples") && baseDir != "/" && baseDir != "." {
-		baseDir = filepath.Dir(baseDir)
-	}
-
 	return &ImportTracker{
 		processedFiles: make(map[string]bool),
 		routeFiles:     make([]string, 0),
 		handlerFiles:   make([]string, 0),
 		baseDir:        baseDir,
+		moduleName:     findModuleName(baseDir),
 	}
+}
+
+// findModuleName tenta encontrar o nome do módulo no go.mod
+func findModuleName(dir string) string {
+	for {
+		modFile := filepath.Join(dir, "go.mod")
+		if _, err := os.Stat(modFile); err == nil {
+			content, err := os.ReadFile(modFile)
+			if err == nil {
+				lines := strings.Split(string(content), "\n")
+				for _, line := range lines {
+					if strings.HasPrefix(line, "module ") {
+						return strings.TrimSpace(strings.TrimPrefix(line, "module "))
+					}
+				}
+			}
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			break
+		}
+		dir = parent
+	}
+	return ""
 }
 
 func (t *ImportTracker) TrackImports(filePath string) error {
@@ -40,14 +62,9 @@ func (t *ImportTracker) TrackImports(filePath string) error {
 	}
 	t.processedFiles[filePath] = true
 
-	// Verificar se é um diretório
+	// Se o arquivo é um diretório, processar todos os arquivos .go dentro dele
 	fileInfo, err := os.Stat(filePath)
-	if err != nil {
-		return fmt.Errorf("failed to stat file %s: %v", filePath, err)
-	}
-
-	// Se for um diretório, processar todos os arquivos .go dentro dele
-	if fileInfo.IsDir() {
+	if err == nil && fileInfo.IsDir() {
 		files, err := os.ReadDir(filePath)
 		if err != nil {
 			return fmt.Errorf("failed to read directory %s: %v", filePath, err)
@@ -56,7 +73,7 @@ func (t *ImportTracker) TrackImports(filePath string) error {
 		for _, file := range files {
 			if !file.IsDir() && strings.HasSuffix(file.Name(), ".go") {
 				fullPath := filepath.Join(filePath, file.Name())
-				if err := t.processFile(fullPath); err != nil {
+				if err := t.TrackImports(fullPath); err != nil {
 					return err
 				}
 			}
@@ -64,20 +81,20 @@ func (t *ImportTracker) TrackImports(filePath string) error {
 		return nil
 	}
 
-	return t.processFile(filePath)
-}
-
-func (t *ImportTracker) processFile(filePath string) error {
+	// Processar arquivo individual
 	fset := token.NewFileSet()
 	file, err := parser.ParseFile(fset, filePath, nil, parser.ParseComments)
 	if err != nil {
-		return fmt.Errorf("failed to parse file %s: %v", filePath, err)
+		return nil // Ignorar arquivos que não podem ser parseados
 	}
 
-	// Verificar se é um arquivo de rotas ou handlers
-	if strings.Contains(filePath, "routes") {
+	// Verificar diretórios especiais
+	dirName := filepath.Base(filepath.Dir(filePath))
+	if dirName == "routes" {
+		fmt.Printf("Found route file: %s\n", filePath)
 		t.routeFiles = append(t.routeFiles, filePath)
-	} else if strings.Contains(filePath, "handlers") {
+	} else if dirName == "handlers" {
+		fmt.Printf("Found handler file: %s\n", filePath)
 		t.handlerFiles = append(t.handlerFiles, filePath)
 	}
 
@@ -85,20 +102,124 @@ func (t *ImportTracker) processFile(filePath string) error {
 	for _, imp := range file.Imports {
 		importPath := strings.Trim(imp.Path.Value, "\"")
 
-		// Se for um import local do projeto
-		if strings.Contains(importPath, "examples/") {
-			// Extrair o caminho relativo após "examples/"
-			parts := strings.Split(importPath, "examples/")
-			if len(parts) > 1 {
-				localPath := filepath.Join(t.baseDir, parts[1])
+		// Se for um import relativo ou local
+		if strings.HasPrefix(importPath, ".") {
+			dir := filepath.Dir(filePath)
+			localPath := filepath.Join(dir, importPath)
+			if err := t.TrackImports(localPath); err != nil {
+				fmt.Printf("Warning: failed to process import %s: %v\n", importPath, err)
+			}
+			continue
+		}
+
+		// Tentar resolver no diretório do projeto
+		if t.moduleName != "" {
+			// Se o import começa com o nome do módulo, resolver relativamente ao diretório base
+			if strings.HasPrefix(importPath, t.moduleName) {
+				relativePath := strings.TrimPrefix(importPath, t.moduleName)
+				localPath := filepath.Join(t.baseDir, relativePath)
 				if err := t.TrackImports(localPath); err != nil {
-					return err
+					fmt.Printf("Warning: failed to process module import %s: %v\n", importPath, err)
 				}
+				continue
+			}
+		}
+
+		// Verificar diretórios especiais no diretório atual
+		routesPath := filepath.Join(t.baseDir, "routes")
+		handlersPath := filepath.Join(t.baseDir, "handlers")
+
+		if _, err := os.Stat(routesPath); err == nil {
+			if err := t.TrackImports(routesPath); err != nil {
+				fmt.Printf("Warning: failed to process routes directory: %v\n", err)
+			}
+		}
+		if _, err := os.Stat(handlersPath); err == nil {
+			if err := t.TrackImports(handlersPath); err != nil {
+				fmt.Printf("Warning: failed to process handlers directory: %v\n", err)
 			}
 		}
 	}
 
 	return nil
+}
+
+func (t *ImportTracker) analyzeFile(file *ast.File, filePath string) {
+	// Verificar se o arquivo contém definições de rotas
+	hasRoutes := false
+	ast.Inspect(file, func(n ast.Node) bool {
+		if call, ok := n.(*ast.CallExpr); ok {
+			if sel, ok := call.Fun.(*ast.SelectorExpr); ok {
+				funcName := sel.Sel.Name
+				// Funções comuns de roteamento em diferentes frameworks
+				if isRoutingFunction(funcName) {
+					hasRoutes = true
+					return false
+				}
+			}
+		}
+		return true
+	})
+
+	// Verificar se o arquivo contém handlers
+	hasHandlers := false
+	for _, decl := range file.Decls {
+		if fn, ok := decl.(*ast.FuncDecl); ok {
+			if isHandlerFunction(fn) {
+				hasHandlers = true
+				break
+			}
+		}
+	}
+
+	if hasRoutes {
+		fmt.Printf("Found route file: %s\n", filePath)
+		t.routeFiles = append(t.routeFiles, filePath)
+	}
+	if hasHandlers {
+		fmt.Printf("Found handler file: %s\n", filePath)
+		t.handlerFiles = append(t.handlerFiles, filePath)
+	}
+}
+
+func isRoutingFunction(name string) bool {
+	routingFuncs := []string{
+		// Gin
+		"GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS", "Group", "Handle", "Any",
+		// Fiber
+		"Get", "Post", "Put", "Delete", "Patch", "Head", "Options", "Group", "All",
+		// Mux
+		"HandleFunc", "Handle", "PathPrefix", "Methods", "Subrouter",
+	}
+	for _, f := range routingFuncs {
+		if name == f {
+			return true
+		}
+	}
+	return false
+}
+
+func isHandlerFunction(fn *ast.FuncDecl) bool {
+	// Verificar se a função tem um parâmetro do tipo *gin.Context, *fiber.Ctx ou http.ResponseWriter
+	if fn.Type.Params != nil && len(fn.Type.Params.List) > 0 {
+		for _, param := range fn.Type.Params.List {
+			if expr, ok := param.Type.(*ast.StarExpr); ok {
+				if sel, ok := expr.X.(*ast.SelectorExpr); ok {
+					typeName := sel.Sel.Name
+					if typeName == "Context" || typeName == "Ctx" {
+						return true
+					}
+				}
+			}
+			// Verificar http.ResponseWriter
+			if sel, ok := param.Type.(*ast.SelectorExpr); ok {
+				if sel.Sel.Name == "ResponseWriter" {
+					return true
+				}
+			}
+		}
+	}
+	return false
 }
 
 // Analyzer define a interface para análise de rotas

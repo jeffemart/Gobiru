@@ -250,5 +250,7 @@ type routeInfo struct {
 	path        string
 	method      string
 	handlerName string
-	basePath    string // Usado pelo Mux para subrouters
+	basePath    string   // Usado pelo Mux para subrouters
+	node        ast.Node // Usado para análise adicional
+	description string   // Descrição da rota
 }
