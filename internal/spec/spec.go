@@ -39,7 +39,7 @@ type Response struct {
 
 // MediaType representa o tipo de mídia do conteúdo
 type MediaType struct {
-	Schema *Schema
+	Schema *Schema `json:"schema,omitempty"`
 }
 
 // Schema representa a estrutura de dados
