@@ -2,7 +2,6 @@ package analyzer
 
 import (
 	"fmt"
-	"go/ast"
 	"go/parser"
 	"go/token"
 	"os"
@@ -144,84 +143,6 @@ func (t *ImportTracker) TrackImports(filePath string) error {
 	return nil
 }
 
-func (t *ImportTracker) analyzeFile(file *ast.File, filePath string) {
-	// Verificar se o arquivo contém definições de rotas
-	hasRoutes := false
-	ast.Inspect(file, func(n ast.Node) bool {
-		if call, ok := n.(*ast.CallExpr); ok {
-			if sel, ok := call.Fun.(*ast.SelectorExpr); ok {
-				funcName := sel.Sel.Name
-				// Funções comuns de roteamento em diferentes frameworks
-				if isRoutingFunction(funcName) {
-					hasRoutes = true
-					return false
-				}
-			}
-		}
-		return true
-	})
-
-	// Verificar se o arquivo contém handlers
-	hasHandlers := false
-	for _, decl := range file.Decls {
-		if fn, ok := decl.(*ast.FuncDecl); ok {
-			if isHandlerFunction(fn) {
-				hasHandlers = true
-				break
-			}
-		}
-	}
-
-	if hasRoutes {
-		fmt.Printf("Found route file: %s\n", filePath)
-		t.routeFiles = append(t.routeFiles, filePath)
-	}
-	if hasHandlers {
-		fmt.Printf("Found handler file: %s\n", filePath)
-		t.handlerFiles = append(t.handlerFiles, filePath)
-	}
-}
-
-func isRoutingFunction(name string) bool {
-	routingFuncs := []string{
-		// Gin
-		"GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS", "Group", "Handle", "Any",
-		// Fiber
-		"Get", "Post", "Put", "Delete", "Patch", "Head", "Options", "Group", "All",
-		// Mux
-		"HandleFunc", "Handle", "PathPrefix", "Methods", "Subrouter",
-	}
-	for _, f := range routingFuncs {
-		if name == f {
-			return true
-		}
-	}
-	return false
-}
-
-func isHandlerFunction(fn *ast.FuncDecl) bool {
-	// Verificar se a função tem um parâmetro do tipo *gin.Context, *fiber.Ctx ou http.ResponseWriter
-	if fn.Type.Params != nil && len(fn.Type.Params.List) > 0 {
-		for _, param := range fn.Type.Params.List {
-			if expr, ok := param.Type.(*ast.StarExpr); ok {
-				if sel, ok := expr.X.(*ast.SelectorExpr); ok {
-					typeName := sel.Sel.Name
-					if typeName == "Context" || typeName == "Ctx" {
-						return true
-					}
-				}
-			}
-			// Verificar http.ResponseWriter
-			if sel, ok := param.Type.(*ast.SelectorExpr); ok {
-				if sel.Sel.Name == "ResponseWriter" {
-					return true
-				}
-			}
-		}
-	}
-	return false
-}
-
 // Analyzer define a interface para análise de rotas
 type Analyzer interface {
 	Analyze() (*spec.Documentation, error)
@@ -261,8 +182,8 @@ func New(framework string, config Config) (Analyzer, error) {
 		analyzer = NewGinAnalyzer(config)
 	case "mux":
 		analyzer = NewMuxAnalyzer(config)
-	case "fiber":
-		analyzer = NewFiberAnalyzer(config)
+	// case "fiber":
+	// 	analyzer = NewFiberAnalyzer(config)
 	default:
 		return nil, fmt.Errorf("unsupported framework: %s", framework)
 	}

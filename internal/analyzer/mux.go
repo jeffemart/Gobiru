@@ -23,7 +23,6 @@ func NewMuxAnalyzer(config Config) *MuxAnalyzer {
 }
 
 type routeContext struct {
-	paths  []string
 	routes []routeInfo
 }
 
@@ -419,18 +418,6 @@ func extractQueryParams(node ast.Node) []*spec.Parameter {
 	})
 
 	return params
-}
-
-// Funções auxiliares...
-func findFunction(file *ast.File, name string) *ast.FuncDecl {
-	for _, decl := range file.Decls {
-		if fn, ok := decl.(*ast.FuncDecl); ok {
-			if fn.Name.Name == name {
-				return fn
-			}
-		}
-	}
-	return nil
 }
 
 func (a *MuxAnalyzer) extractMethod(node *ast.CallExpr) string {

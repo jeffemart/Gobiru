@@ -130,19 +130,6 @@ func extractResponses(node ast.Node, filename string) map[string]*spec.Response 
 	return responses
 }
 
-func isHTTPMethod(method string) bool {
-	methods := map[string]bool{
-		"GET":     true,
-		"POST":    true,
-		"PUT":     true,
-		"DELETE":  true,
-		"PATCH":   true,
-		"HEAD":    true,
-		"OPTIONS": true,
-	}
-	return methods[method]
-}
-
 func extractStructProperties(filename, structName string) map[string]*spec.Schema {
 	fset := token.NewFileSet()
 	file, err := parser.ParseFile(fset, filename, nil, parser.ParseComments)
@@ -212,37 +199,6 @@ func extractStructProperties(filename, structName string) map[string]*spec.Schem
 	})
 
 	return properties
-}
-
-func extractFiberParameters(path string) []*spec.Parameter {
-	params := make([]*spec.Parameter, 0)
-	segments := strings.Split(path, "/")
-	for _, segment := range segments {
-		if strings.HasPrefix(segment, ":") {
-			paramName := strings.TrimPrefix(segment, ":")
-			params = append(params, &spec.Parameter{
-				Name:        paramName,
-				In:          "path",
-				Required:    true,
-				Description: fmt.Sprintf("Path parameter: %s", paramName),
-				Schema: &spec.Schema{
-					Type: "string",
-				},
-			})
-		} else if strings.HasPrefix(segment, "*") {
-			paramName := strings.TrimPrefix(segment, "*")
-			params = append(params, &spec.Parameter{
-				Name:        paramName,
-				In:          "path",
-				Required:    true,
-				Description: fmt.Sprintf("Wildcard parameter: %s", paramName),
-				Schema: &spec.Schema{
-					Type: "string",
-				},
-			})
-		}
-	}
-	return params
 }
 
 // routeInfo representa uma rota da API
