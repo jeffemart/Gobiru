@@ -11,7 +11,7 @@ build:
 
 test:
 	@echo "Running tests..."
-	@go test ./...
+	@go test ./internal/... ./cmd/...
 
 clean:
 	@echo "Cleaning..."
@@ -32,4 +32,4 @@ example-gin:
 
 example-fiber:
 	@echo "Running Fiber example..."
-	@go run examples/fiber/simple/main.go 
+	@go run examples/fiber/simple/main.go

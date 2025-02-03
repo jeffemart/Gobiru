@@ -1,9 +1,9 @@
 package analyzer
 
 import (
-	"testing"
 	"os"
 	"path/filepath"
+	"testing"
 )
 
 func TestFindMainFile(t *testing.T) {
@@ -31,4 +31,4 @@ func TestAnalyzeRoutes(t *testing.T) {
 	// Aqui você pode adicionar um teste para a função Analyze
 	// Isso pode incluir a criação de arquivos de rotas e handlers
 	// e verificar se as operações são analisadas corretamente.
-} 
+}

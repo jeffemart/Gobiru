@@ -17,19 +17,56 @@ func TestGenerateOpenAPIDocumentation(t *testing.T) {
 	doc := &spec.Documentation{
 		Operations: []*spec.Operation{
 			{
-				Path:   "/api/v1/products",
+				Path:   "/api/v1/test/{id}",
 				Method: "GET",
-				Summary: "List all products",
+				Summary: "TestHandler lida com a rota de teste",
+				Parameters: []*spec.Parameter{
+					{
+						Name:        "id",
+						In:          "path",
+						Required:    true,
+						Description: "Path parameter: id",
+						Schema: &spec.Schema{
+							Type: "string",
+						},
+					},
+				},
+				RequestBody: &spec.RequestBody{
+					Required: true,
+					Content: map[string]*spec.MediaType{
+						"application/json": {
+							Schema: &spec.Schema{
+								Type: "object",
+								Properties: map[string]*spec.Schema{
+									"name":  {Type: "string"},
+									"email": {Type: "string"},
+								},
+							},
+						},
+					},
+				},
+				Responses: map[string]*spec.Response{
+					"200": {
+						Description: "Successful response",
+						Content: map[string]*spec.MediaType{
+							"application/json": {
+								Schema: &spec.Schema{
+									Type: "object",
+								},
+							},
+						},
+					},
+				},
 			},
 		},
 	}
 
 	// Configurações para geração da documentação OpenAPI
 	config := Config{
-		OutputFile: outputFile,
-		Title:      "Test API",
+		OutputFile:  outputFile,
+		Title:       "Test API",
 		Description: "Test API Description",
-		Version:    "1.0.0",
+		Version:     "1.0.0",
 	}
 
 	// Gerar documentação OpenAPI
