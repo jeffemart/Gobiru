@@ -12,9 +12,8 @@ func main() {
 	r := mux.NewRouter()
 
 	// Setup das rotas
-	routes.SetupPublicRoutes(r)  // Rotas públicas (auth, docs, status)
-	routes.SetupPrivateRoutes(r) // Rotas privadas (produtos, pedidos)
-
+	routes.SetupRoutes(r)
+	
 	log.Println("Server starting on http://localhost:8080")
 	log.Fatal(http.ListenAndServe(":8080", r))
 }
