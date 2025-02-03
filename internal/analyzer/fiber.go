@@ -48,16 +48,37 @@ func (a *FiberAnalyzer) Analyze() (*spec.Documentation, error) {
 						// Extrair path
 						if pathLit, ok := call.Args[0].(*ast.BasicLit); ok {
 							operation.Path = strings.Trim(pathLit.Value, "\"")
+							operation.Parameters = extractFiberParameters(operation.Path)
 						}
 
 						// Extrair handler
+						var handlerName string
 						if ident, ok := call.Args[1].(*ast.Ident); ok {
-							operation.Summary = findHandlerComments(a.config.HandlerFiles, ident.Name)
-							operations = append(operations, operation)
+							handlerName = ident.Name
 						} else if sel, ok := call.Args[1].(*ast.SelectorExpr); ok {
-							operation.Summary = findHandlerComments(a.config.HandlerFiles, sel.Sel.Name)
-							operations = append(operations, operation)
+							handlerName = sel.Sel.Name
 						}
+
+						// Processar handler para mais detalhes
+						if handlerName != "" {
+							handlerFile := findHandlerFile(a.config.HandlerFiles, handlerName)
+							if handlerFile != "" {
+								// Adicionar summary do comentário
+								operation.Summary = findHandlerComments(a.config.HandlerFiles, handlerName)
+
+								// Extrair informações adicionais do handler
+								handler := findHandlerNode(handlerFile, handlerName)
+								if handler != nil {
+									// Extrair corpo da requisição
+									operation.RequestBody = extractRequestBody(handler, handlerFile)
+									
+									// Extrair respostas
+									operation.Responses = extractResponses(handler, handlerFile)
+								}
+							}
+						}
+
+						operations = append(operations, operation)
 					}
 				}
 			}
@@ -74,6 +95,48 @@ func (a *FiberAnalyzer) Analyze() (*spec.Documentation, error) {
 	return &spec.Documentation{
 		Operations: operations,
 	}, nil
+}
+
+// Encontra o arquivo do handler para um determinado nome de handler
+func findHandlerFile(handlerFiles []string, handlerName string) string {
+	for _, file := range handlerFiles {
+		fset := token.NewFileSet()
+		node, err := parser.ParseFile(fset, file, nil, parser.ParseComments)
+		if err != nil {
+			continue
+		}
+
+		for _, decl := range node.Decls {
+			if fn, ok := decl.(*ast.FuncDecl); ok {
+				if fn.Name.Name == handlerName {
+					return file
+				}
+			}
+		}
+	}
+	return ""
+}
+
+// Encontra o nó AST do handler
+func findHandlerNode(filename, handlerName string) ast.Node {
+	fset := token.NewFileSet()
+	node, err := parser.ParseFile(fset, filename, nil, parser.ParseComments)
+	if err != nil {
+		return nil
+	}
+
+	var handlerNode ast.Node
+	ast.Inspect(node, func(n ast.Node) bool {
+		if fn, ok := n.(*ast.FuncDecl); ok {
+			if fn.Name.Name == handlerName {
+				handlerNode = n
+				return false
+			}
+		}
+		return true
+	})
+
+	return handlerNode
 }
 
 func isFiberHTTPMethod(method string) bool {
@@ -104,27 +167,4 @@ func findHandlerComments(handlerFiles []string, handlerName string) string {
 		}
 	}
 	return ""
-}
-
-// Função auxiliar para extrair parâmetros da rota
-func extractRouteParams(path string) []*spec.Parameter {
-	params := make([]*spec.Parameter, 0)
-	segments := strings.Split(path, "/")
-
-	for _, segment := range segments {
-		if strings.HasPrefix(segment, ":") {
-			name := strings.TrimPrefix(segment, ":")
-			params = append(params, &spec.Parameter{
-				Name:        name,
-				In:          "path",
-				Required:    true,
-				Description: fmt.Sprintf("Path parameter: %s", name),
-				Schema: &spec.Schema{
-					Type: "string",
-				},
-			})
-		}
-	}
-
-	return params
 }
