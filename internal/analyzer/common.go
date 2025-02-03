@@ -11,6 +11,14 @@ import (
 	"github.com/jeffemart/gobiru/internal/spec"
 )
 
+// Config contém as configurações para análise
+type Config struct {
+	MainFile     string
+	BaseDir      string
+	RouterFiles  []string
+	HandlerFiles []string
+}
+
 // Funções comuns utilizadas por múltiplos analyzers
 func extractSummaryFromComments(node ast.Node) string {
 	if funcDecl, ok := node.(*ast.FuncDecl); ok {
@@ -253,4 +261,40 @@ type routeInfo struct {
 	basePath    string   // Usado pelo Mux para subrouters
 	node        ast.Node // Usado para análise adicional
 	description string   // Descrição da rota
+}
+
+// NewAnalyzer cria um novo analisador baseado no framework
+func NewAnalyzer(framework string, config Config) (Analyzer, error) {
+	if config.MainFile == "" {
+		// Tentar encontrar o main.go se não foi especificado
+		mainFile, err := FindMainFile(config.BaseDir)
+		if err != nil {
+			return nil, err
+		}
+		config.MainFile = mainFile
+	}
+
+	// Rastrear imports a partir do main.go
+	tracker := NewImportTracker(config.MainFile)
+	if err := tracker.TrackImports(config.MainFile); err != nil {
+		return nil, fmt.Errorf("failed to track imports: %v", err)
+	}
+
+	// Atualizar config com os arquivos encontrados
+	config.RouterFiles = tracker.routeFiles
+	config.HandlerFiles = tracker.handlerFiles
+
+	var analyzer Analyzer
+	switch framework {
+	case "gin":
+		analyzer = NewGinAnalyzer(config)
+	case "mux":
+		analyzer = NewMuxAnalyzer(config)
+	case "fiber":
+		analyzer = NewFiberAnalyzer(config)
+	default:
+		return nil, fmt.Errorf("unsupported framework: %s", framework)
+	}
+
+	return analyzer, nil
 }

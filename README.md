@@ -12,17 +12,25 @@ go install github.com/jeffemart/gobiru/cmd/gobiru@latest
 
 ## Uso
 
-O Gobiru analisa seu código fonte e gera documentação em formato JSON e OpenAPI (Swagger).
+O Gobiru analisa seu código fonte e gera documentação em formato OpenAPI (Swagger).
 
 ### Parâmetros
 
 - `-framework`: Framework usado (gin, mux, fiber)
-- `-main`: Arquivo principal da aplicação
-- `-output`: Caminho para o arquivo JSON de saída
-- `-openapi`: Caminho para o arquivo OpenAPI de saída
+- `-main`: Arquivo principal da aplicação (opcional)
 - `-title`: Título da documentação
 - `-description`: Descrição da API
 - `-version`: Versão da API
+
+## Testes
+
+O projeto inclui testes para garantir a funcionalidade correta. Para executar todos os testes, use o seguinte comando:
+
+```bash
+go test ./...
+```
+
+Os testes verificarão se as funções e rotas estão funcionando conforme o esperado.
 
 ## Exemplos por Framework
 
