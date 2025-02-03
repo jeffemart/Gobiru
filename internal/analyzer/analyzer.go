@@ -227,13 +227,6 @@ type Analyzer interface {
 	Analyze() (*spec.Documentation, error)
 }
 
-// Config contém as configurações para análise
-type Config struct {
-	MainFile     string
-	RouterFiles  []string
-	HandlerFiles []string
-}
-
 // BaseAnalyzer contém a implementação comum para todos os analisadores
 type BaseAnalyzer struct {
 	config Config
@@ -242,7 +235,12 @@ type BaseAnalyzer struct {
 // New cria um novo analisador baseado no framework
 func New(framework string, config Config) (Analyzer, error) {
 	if config.MainFile == "" {
-		return nil, fmt.Errorf("main file is required")
+		// Tentar encontrar o main.go se não foi especificado
+		mainFile, err := FindMainFile(config.BaseDir)
+		if err != nil {
+			return nil, err
+		}
+		config.MainFile = mainFile
 	}
 
 	// Rastrear imports a partir do main.go
@@ -268,4 +266,29 @@ func New(framework string, config Config) (Analyzer, error) {
 	}
 
 	return analyzer, nil
+}
+
+// FindMainFile percorre o diretório base e procura pelo arquivo main.go
+func FindMainFile(baseDir string) (string, error) {
+	var mainFilePath string
+	err := filepath.Walk(baseDir, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if info.IsDir() {
+			return nil
+		}
+		if info.Name() == "main.go" {
+			mainFilePath = path
+			return filepath.SkipDir // Para não continuar a busca após encontrar
+		}
+		return nil
+	})
+	if err != nil {
+		return "", err
+	}
+	if mainFilePath == "" {
+		return "", fmt.Errorf("main.go not found in %s", baseDir)
+	}
+	return mainFilePath, nil
 }

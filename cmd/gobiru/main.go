@@ -14,8 +14,6 @@ func main() {
 	var (
 		framework   string
 		mainFile    string
-		output      string
-		openapi     string
 		title       string
 		description string
 		version     string
@@ -23,20 +21,25 @@ func main() {
 
 	flag.StringVar(&framework, "framework", "", "Framework usado (gin, fiber, mux)")
 	flag.StringVar(&mainFile, "main", "", "Arquivo principal da aplicação")
-	flag.StringVar(&output, "output", "", "Path to output JSON file")
-	flag.StringVar(&openapi, "openapi", "", "Path to output OpenAPI file")
+	// Removendo a flag -openapi
+	// flag.StringVar(&openapi, "openapi", "", "Path to output OpenAPI file")
+
+	// Definindo um caminho padrão para o arquivo OpenAPI
+	openapi := "docs/openapi.json" // ou "examples/gorilla/docs/openapi.json"
+
 	flag.StringVar(&title, "title", "", "Title for OpenAPI documentation")
 	flag.StringVar(&description, "description", "", "Description for OpenAPI documentation")
 	flag.StringVar(&version, "version", "", "Version for OpenAPI documentation")
 
 	flag.Parse()
 
-	// Validar parâmetros obrigatórios
-	if framework == "" {
-		log.Fatal("Framework is required (-framework)")
-	}
+	// Se a flag -main não for passada, tentar encontrar o main.go automaticamente
 	if mainFile == "" {
-		log.Fatal("Path to main.go is required (-main)")
+		var err error
+		mainFile, err = analyzer.FindMainFile(".") // Passando o diretório atual
+		if err != nil {
+			log.Fatalf("Error finding main.go: %v", err)
+		}
 	}
 
 	// Resolver caminho absoluto do main.go
@@ -60,11 +63,7 @@ func main() {
 		log.Fatalf("Failed to analyze routes: %v", err)
 	}
 
-	// Configurações para geração da documentação
-	jsonConfig := generator.Config{
-		OutputFile: output,
-	}
-
+	// Configurações para geração da documentação OpenAPI
 	openapiConfig := generator.Config{
 		OutputFile:  openapi,
 		Title:       title,
@@ -72,19 +71,13 @@ func main() {
 		Version:     version,
 	}
 
-	// Gerar documentação
-	jsonGen := generator.NewJSONGenerator()
-	if err := jsonGen.Generate(doc, jsonConfig); err != nil {
-		log.Fatalf("Failed to generate JSON documentation: %v", err)
-	}
-
+	// Gerar documentação OpenAPI
 	openapiGen := generator.NewOpenAPIGenerator()
 	if err := openapiGen.Generate(doc, openapiConfig); err != nil {
 		log.Fatalf("Failed to generate OpenAPI documentation: %v", err)
 	}
 
-	log.Printf("Documentation generated successfully!")
-	log.Printf("JSON documentation: %s", output)
+	log.Printf("OpenAPI documentation generated successfully!")
 	log.Printf("OpenAPI documentation: %s", openapi)
 }
 
