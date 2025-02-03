@@ -9,17 +9,15 @@ import (
 // CreateOrder cria um novo pedido
 func CreateOrder(c *fiber.Ctx) error {
 	var req struct {
-		CustomerID string    `json:"customer_id" validate:"required"`
+		CustomerID string    `json:"customerId" validate:"required"`
 		Items      []string  `json:"items" validate:"required"`
 		Total      float64   `json:"total" validate:"required"`
-		OrderDate  time.Time `json:"order_date"`
+		OrderDate  time.Time `json:"orderDate"`
 	}
 
 	if err := c.BodyParser(&req); err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(ErrorResponse{
-			Code:    "INVALID_REQUEST",
-			Message: "Invalid request body",
-			Details: err.Error(),
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Invalid request body",
 		})
 	}
 
