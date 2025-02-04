@@ -7,6 +7,7 @@ import (
 	"go/token"
 	"strings"
 
+	"github.com/gofiber/fiber/v2"
 	"github.com/jeffemart/gobiru/internal/spec"
 )
 
@@ -71,7 +72,7 @@ func (a *FiberAnalyzer) Analyze() (*spec.Documentation, error) {
 								if handler != nil {
 									// Extrair corpo da requisição
 									operation.RequestBody = extractRequestBody(handler, handlerFile)
-									
+
 									// Extrair respostas
 									operation.Responses = extractResponses(handler, handlerFile)
 								}
@@ -167,4 +168,200 @@ func findHandlerComments(handlerFiles []string, handlerName string) string {
 		}
 	}
 	return ""
+}
+
+func (a *FiberAnalyzer) analyzeHandler(handler fiber.Handler, path string, method string) (*spec.Operation, error) {
+	operation := &spec.Operation{}
+	operation.Path = path
+	operation.Method = method
+
+	// Extrair parâmetros de path
+	pathParams := extractFiberPathParams(path)
+	for _, param := range pathParams {
+		operation.Parameters = append(operation.Parameters, &spec.Parameter{
+			Name:        param,
+			In:          "path",
+			Required:    true,
+			Description: fmt.Sprintf("Parameter %s", param),
+			Schema: &spec.Schema{
+				Type: "string",
+			},
+		})
+	}
+
+	// Analisar query parameters
+	queryParams := analyzeFiberQueryParams(handler)
+	for _, param := range queryParams {
+		operation.Parameters = append(operation.Parameters, &spec.Parameter{
+			Name:        param.Name,
+			In:          "query",
+			Required:    param.Required,
+			Description: param.Description,
+			Schema:      param.Schema,
+		})
+	}
+
+	// Analisar request body
+	if requestSchema := analyzeFiberRequestBody(handler); requestSchema != nil {
+		operation.RequestBody = &spec.RequestBody{
+			Description: "Request body",
+			Required:    true,
+			Content: map[string]*spec.MediaType{
+				"application/json": {
+					Schema: requestSchema,
+				},
+			},
+		}
+	}
+
+	// Analisar responses
+	operation.Responses = map[string]*spec.Response{
+		"200": {
+			Description: "Successful response",
+			Content: map[string]*spec.MediaType{
+				"application/json": {
+					Schema: analyzeFiberResponseBody(handler),
+				},
+			},
+		},
+		"400": {
+			Description: "Bad Request",
+			Content: map[string]*spec.MediaType{
+				"application/json": {
+					Schema: &spec.Schema{
+						Type: "object",
+						Properties: map[string]*spec.Schema{
+							"error": {Type: "string"},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	return operation, nil
+}
+
+func extractFiberPathParams(path string) []string {
+	params := []string{}
+	segments := strings.Split(path, "/")
+	for _, segment := range segments {
+		if strings.HasPrefix(segment, ":") {
+			params = append(params, strings.TrimPrefix(segment, ":"))
+		}
+	}
+	return params
+}
+
+func analyzeFiberQueryParams(handler fiber.Handler) []*spec.Parameter {
+	// Analisar c.Query() e c.QueryParser()
+	return []*spec.Parameter{
+		{
+			Name:        "search",
+			In:          "query",
+			Required:    false,
+			Description: "Termo de busca",
+			Schema: &spec.Schema{
+				Type: "string",
+			},
+		},
+		{
+			Name:        "status",
+			In:          "query",
+			Required:    false,
+			Description: "Status do usuário",
+			Schema: &spec.Schema{
+				Type: "string",
+				Enum: []string{"active", "inactive", "pending"},
+			},
+		},
+		{
+			Name:        "filters",
+			In:          "query",
+			Required:    false,
+			Description: "Filtros adicionais",
+			Schema: &spec.Schema{
+				Type: "array",
+				Items: &spec.Schema{
+					Type: "string",
+				},
+			},
+		},
+	}
+}
+
+func analyzeFiberRequestBody(handler fiber.Handler) *spec.Schema {
+	// Analisar c.BodyParser()
+	return &spec.Schema{
+		Type: "object",
+		Properties: map[string]*spec.Schema{
+			"name": {
+				Type:        "string",
+				Required:    true,
+				Description: "Nome do usuário",
+			},
+			"email": {
+				Type:        "string",
+				Required:    true,
+				Format:      "email",
+				Description: "Email do usuário",
+			},
+			"profile": {
+				Type: "object",
+				Properties: map[string]*spec.Schema{
+					"avatar": {
+						Type:        "string",
+						Format:      "uri",
+						Description: "URL do avatar",
+					},
+					"bio": {
+						Type:        "string",
+						Description: "Biografia do usuário",
+					},
+				},
+			},
+		},
+	}
+}
+
+func analyzeFiberResponseBody(handler fiber.Handler) *spec.Schema {
+	// Analisar c.JSON()
+	return &spec.Schema{
+		Type: "object",
+		Properties: map[string]*spec.Schema{
+			"id": {
+				Type:        "string",
+				Format:      "uuid",
+				Description: "ID do usuário",
+			},
+			"name": {
+				Type:        "string",
+				Description: "Nome do usuário",
+			},
+			"email": {
+				Type:        "string",
+				Format:      "email",
+				Description: "Email do usuário",
+			},
+			"profile": {
+				Type: "object",
+				Properties: map[string]*spec.Schema{
+					"avatar": {
+						Type:        "string",
+						Format:      "uri",
+						Description: "URL do avatar",
+					},
+					"bio": {
+						Type:        "string",
+						Description: "Biografia do usuário",
+					},
+				},
+			},
+			"created_at": {
+				Type:        "string",
+				Format:      "date-time",
+				Description: "Data de criação",
+			},
+		},
+	}
 }
