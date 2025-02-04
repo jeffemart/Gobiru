@@ -298,3 +298,18 @@ func NewAnalyzer(framework string, config Config) (Analyzer, error) {
 
 	return analyzer, nil
 }
+
+func findTypeSpec(file *ast.File, typeName string) *ast.TypeSpec {
+	for _, decl := range file.Decls {
+		if genDecl, ok := decl.(*ast.GenDecl); ok {
+			for _, spec := range genDecl.Specs {
+				if typeSpec, ok := spec.(*ast.TypeSpec); ok {
+					if typeSpec.Name.Name == typeName {
+						return typeSpec
+					}
+				}
+			}
+		}
+	}
+	return nil
+}
