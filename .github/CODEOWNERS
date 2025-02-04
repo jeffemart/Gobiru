@@ -1,0 +1,20 @@
+# Responsáveis padrão
+*       @jeffemart
+
+# Configurações do projeto
+/.github/        @jeffemart
+/docs/          @jeffemart
+*.md            @jeffemart
+
+# Código fonte
+/cmd/           @jeffemart
+/internal/      @jeffemart
+/pkg/           @jeffemart
+
+# Exemplos
+/examples/      @jeffemart
+
+# Configurações de build
+Makefile        @jeffemart
+Dockerfile      @jeffemart
+docker-compose.yml @jeffemart 
