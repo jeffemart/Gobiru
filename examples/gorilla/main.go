@@ -1,7 +1,6 @@
 package main
 
 import (
-	"log"
 	"net/http"
 
 	"github.com/gorilla/mux"
@@ -14,6 +13,7 @@ func main() {
 	// Setup das rotas
 	routes.SetupRoutes(r)
 
-	log.Println("Server starting on http://localhost:8080")
-	log.Fatal(http.ListenAndServe(":8080", r))
+	// Iniciando o servidor
+	http.Handle("/", r)
+	http.ListenAndServe(":8080", nil)
 }
