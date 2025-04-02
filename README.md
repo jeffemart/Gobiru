@@ -1,6 +1,6 @@
 # Gobiru - Gerador de Documentação de API
 
-![Gobiru Logo](https://res.cloudinary.com/dx70wyorg/image/upload/v1736953035/photo_2025-01-15_11-40-32_esheqe.jpg)
+![Gobiru Logo](https://res.cloudinary.com/dx70wyorg/image/upload/v1743597586/gopher_carregando_pilha_de_papeis2_akxtb0.png)
 
 Gobiru é uma ferramenta para gerar automaticamente documentação de APIs Go, suportando os frameworks Gin, Gorilla Mux e Fiber.
 
